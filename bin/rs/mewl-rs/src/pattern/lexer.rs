@@ -1,7 +1,7 @@
 //! Lexical analyzer of pick patterns.
 
 use crate::compat::CHAR_IS_SIGNED;
-use crate::error::{Result, fatal};
+use super::{PatternError, Result};
 
 use super::Cmp;
 
@@ -56,14 +56,14 @@ impl<'a> Lexer<'a> {
     /// Steps back even after the end, as `Ungetc()` does.
     fn ungetc(&mut self) -> Result<()> {
         if self.pos == 0 {
-            return Err(fatal!("ungetc is impossible."));
+            return Err(PatternError::UngetcImpossible);
         }
         self.pos -= 1;
         Ok(())
     }
 
     fn escaped(&mut self) -> Result<u8> {
-        self.getc().ok_or_else(|| fatal!("broken escape."))
+        self.getc().ok_or(PatternError::BrokenEscape)
     }
 
     /// The next token. `None` at the end of the pattern (or at 0xff,
@@ -144,7 +144,7 @@ impl<'a> Lexer<'a> {
                 _ => s.push(c),
             }
         }
-        Err(fatal!("broken quoted string."))
+        Err(PatternError::BrokenQuotedString)
     }
 }
 

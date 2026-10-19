@@ -1,5 +1,6 @@
-//! `mewl-rs-utf8` decodes header values for sort and pick, while
-//! `mewl-rs` behaves as mewl.
+//! `mewl-rs-utf8` decodes header values for sort and pick more than
+//! `mewl-rs`, which behaves as mewl. `mewl-rs` invoked by the name
+//! `mewl-rs-utf8` is the same as `mewl-rs-utf8`.
 
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -26,14 +27,20 @@ impl Fixture {
         for (i, m) in messages.iter().enumerate() {
             fs::write(inbox.join((i + 1).to_string()), m).unwrap();
         }
-        for name in ["mewl-rs", "mewl-rs-utf8"] {
-            symlink(env!("CARGO_BIN_EXE_mewl-rs"), dir.join(name)).unwrap();
-        }
+        fs::create_dir(dir.join("link")).unwrap();
+        symlink(env!("CARGO_BIN_EXE_mewl-rs"), dir.join("link/mewl-rs-utf8")).unwrap();
         Fixture { dir }
     }
 
+    /// Runs `mewl-rs`, `mewl-rs-utf8`, or `link/mewl-rs-utf8`, which is
+    /// `mewl-rs` linked by the name.
     fn run(&self, prog: &str, args: &[&str]) -> String {
-        let out = Command::new(self.dir.join(prog))
+        let path = match prog {
+            "mewl-rs" => PathBuf::from(env!("CARGO_BIN_EXE_mewl-rs")),
+            "mewl-rs-utf8" => PathBuf::from(env!("CARGO_BIN_EXE_mewl-rs-utf8")),
+            _ => self.dir.join(prog),
+        };
+        let out = Command::new(path)
             .arg("-b")
             .arg(self.dir.join("Mail"))
             .args(args)
@@ -99,6 +106,14 @@ fn key_names_a_field() {
     assert_eq!(f.run("mewl-rs", &["-p", "subject=plain", "+inbox"]), "3\n");
     assert_eq!(f.run("mewl-rs", &["-p", "subject:=plain", "+inbox"]), "3\n");
     assert_eq!(f.run("mewl-rs", &["-d", "from", "+inbox", "3"]), "3:: bar@example.com\n");
+}
+
+#[test]
+fn invoked_by_name() {
+    let f = Fixture::new("link");
+    for args in [&["-p", "subject=日本語", "+inbox"][..], &["-l", "0", "-d", "subject:", "+inbox"], &["+inbox"]] {
+        assert_eq!(f.run("link/mewl-rs-utf8", args), f.run("mewl-rs-utf8", args));
+    }
 }
 
 #[test]

@@ -8,7 +8,8 @@ A Rust port of `mewl`, the message scanner for Mew.
 % cargo build --release
 ```
 
-The binary is `target/release/mewl-rs`.
+The binaries are `target/release/mewl-rs` and
+`target/release/mewl-rs-utf8`. `cargo install --path .` installs both.
 
 ## mewl-rs
 
@@ -42,13 +43,8 @@ Invoked as `mewl-rs-utf8`, it decodes more than `mewl` does:
 
 The output of scan is the same as `mewl`'s since Mew decodes it.
 
-Make a link with this name:
-
-```
-% ln -s mewl-rs mewl-rs-utf8
-```
-
-and tell Mew to use it:
+`mewl-rs` invoked by the name `mewl-rs-utf8`, e.g. through a link, is
+the same. Tell Mew to use it:
 
 ```
 (setq mew-prog-mewl "mewl-rs-utf8")

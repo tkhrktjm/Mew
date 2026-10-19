@@ -30,6 +30,11 @@ fn isspace(c: u8) -> bool {
 /// Whether `char` is signed in C on this platform.
 pub const CHAR_IS_SIGNED: bool = std::ffi::c_char::MIN != 0;
 
+/// Whether mewl would be built with glibc and signed `char`, where
+/// `tolower()` of a byte >= 0x80 is not the byte itself (see
+/// [`crate::bytes::Case::IgnoreAsGlibc`]).
+pub const GLIBC: bool = cfg!(all(target_os = "linux", target_env = "gnu")) && CHAR_IS_SIGNED;
+
 #[cfg(test)]
 mod tests {
     use super::atoi;

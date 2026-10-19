@@ -6,15 +6,21 @@
 //! output:
 //!
 //! - Reaching the end of the data overwrites its last byte with LF.
-//! - Comparing a field name may look beyond the data into what the
-//!   previous message left in the buffer.
+//! - Comparing a field name for scan may look beyond the data into what
+//!   the previous message left in the buffer.
+//!
+//! So positions are indices into the buffer, as pointers in mewl, and
+//! the order of comparing and skipping a field is kept.
+
+mod fields;
 
 use std::io::{ErrorKind, Read};
 use std::ops::Range;
 
-use crate::cli::Flavor;
-use crate::compat::CHAR_IS_SIGNED;
-use crate::mime;
+pub use fields::{BodyLine, FieldSet, Summary};
+
+use crate::bytes::{BytesExt, Case};
+use crate::flavor::Flavor;
 
 /// 64k, now even 16k is not enough.
 pub const MAX_HEADER: usize = 65536;
@@ -23,54 +29,6 @@ const LF: u8 = b'\n';
 
 /// The special key of a pick pattern to search the whole header.
 const WHOLE_HEADER: &[u8] = b"head";
-
-/****************************************************************
- *
- * Fields to be extracted
- *
- */
-
-pub struct FieldSet {
-    names: Vec<Vec<u8>>,
-    /// For `References:`, only the last line is extracted.
-    references: Option<usize>,
-}
-
-impl FieldSet {
-    pub const DEFAULT: &[u8] = b"Subject:,Date:,From:,To:,Cc:,Content-Type:,Content-Transfer-Encoding:,X-Mew-UIDL:,Message-ID:,In-Reply-To:,References:,X-Mew-Ref:";
-
-    pub const REFERENCES: &[u8] = b"References:";
-
-    /// `names` is comma-separated.
-    pub fn parse(names: &[u8]) -> Self {
-        let names: Vec<Vec<u8>> = names.split(|&c| c == b',').map(<[u8]>::to_vec).collect();
-        let references = names.iter().rposition(|n| n == Self::REFERENCES);
-        FieldSet { names, references }
-    }
-
-    pub fn is_references(&self, i: usize) -> bool {
-        self.references == Some(i)
-    }
-}
-
-/// Fields and the beginning of the body found by [`Header::summarize`].
-pub struct Summary {
-    /// The bytes to be printed for each field in [`FieldSet`].
-    pub fields: Vec<Option<Range<usize>>>,
-    pub body: Vec<BodyLine>,
-}
-
-pub struct BodyLine {
-    pub range: Range<usize>,
-    /// A line beginning with `.` is escaped as `..`.
-    pub dot_stuffed: bool,
-}
-
-/****************************************************************
- *
- * Header buffer
- *
- */
 
 /// Where a field ends.
 struct FieldEnd {
@@ -120,8 +78,8 @@ impl Header {
         self.buf.get(range).unwrap_or_default()
     }
 
-    /// `strncasecmp(name, &buf[pos], strlen(name)) == 0`.
-    /// This may look beyond the data.
+    /// `strncasecmp(name, &buf[pos], strlen(name)) == 0`, which may
+    /// look beyond the data.
     fn has_name_at(&self, pos: usize, name: &[u8]) -> bool {
         self.buf
             .get(pos..pos + name.len())
@@ -136,7 +94,7 @@ impl Header {
         if len == 0 || p >= self.len || len >= self.len - p {
             return false;
         }
-        self.buf[p..p + len].eq_ignore_ascii_case(key) && (key[len - 1] == b':' || self.buf[p + len] == b':')
+        self.buf[p..p + len].eq_ignore_ascii_case(key) && (key.ends_with(b":") || self.buf[p + len] == b':')
     }
 
     /// The beginning of the line after `p`. `None` if the data or,
@@ -188,7 +146,7 @@ impl Header {
     }
 
     /// The C string beginning at `beg` when NUL is put at `nul` for a
-    /// while. Without `nul` before it, it may extend beyond the data.
+    /// while. Without `nul` after `beg`, it may extend beyond the data.
     fn c_str(&self, beg: usize, nul: Option<usize>) -> &[u8] {
         let end = match nul {
             Some(nul) if nul >= beg => nul,
@@ -198,21 +156,24 @@ impl Header {
         s.split(|&c| c == 0).next().unwrap_or_default()
     }
 
-    /****************************************************************
-     *
-     * For scan
-     *
-     */
+    /// The end of a field body excluding its last LF.
+    fn body_end(&self, end: &FieldEnd) -> Option<usize> {
+        match (end.truncated, end.next) {
+            (Some(t), _) => Some(t - 1),
+            (None, Some(n)) => Some(n - 1),
+            (None, None) => self.len.checked_sub(1),
+        }
+    }
 
-    /// Finds `fields` in the header and the first `body_len` lines of
-    /// the body.
+    /// For scan: finds `fields` in the header and the first `body_len`
+    /// lines of the body.
     pub fn summarize(&mut self, fields: &FieldSet, body_len: i32) -> Summary {
-        let mut found: Vec<Option<Range<usize>>> = vec![None; fields.names.len()];
+        let mut found: Vec<Option<Range<usize>>> = vec![None; fields.names().len()];
         let mut body_beg = None;
         let mut p = 0;
 
         loop {
-            let matched = fields.names.iter().position(|n| self.has_name_at(p, n));
+            let matched = fields.names().iter().position(|n| self.has_name_at(p, n));
             let end = self.next_field(p, false);
             if let Some(i) = matched {
                 found[i] = Some(if fields.is_references(i) {
@@ -220,7 +181,7 @@ impl Header {
                     Its last line only, without the name since it
                     is printed separately. */
                     let beg = if end.last_line == p {
-                        p + fields.names[i].len()
+                        p + fields.names()[i].len()
                     } else {
                         end.last_line
                     };
@@ -260,13 +221,8 @@ impl Header {
         Summary { fields: found, body }
     }
 
-    /****************************************************************
-     *
-     * For sort
-     *
-     */
-
-    /// The value of the first field named `key` (`key` may lack `:`).
+    /// For sort: the value of the first field named `key`, as mewl
+    /// prints it. If `key` lacks `:`, the value begins with it.
     pub fn field_value(&mut self, key: &[u8]) -> Option<Range<usize>> {
         let mut p = 0;
         loop {
@@ -276,6 +232,7 @@ impl Header {
                 let stop = match (end.truncated, end.next) {
                     (Some(t), _) => t - 1,
                     (None, Some(n)) => n - 1,
+                    /* Including the last byte, which is LF now. */
                     (None, None) => self.len,
                 };
                 return Some(p + key.len()..stop);
@@ -284,26 +241,15 @@ impl Header {
         }
     }
 
-    /****************************************************************
-     *
-     * For pick
-     *
-     */
-
-    /// Whether a field named `key` contains `value`. The key `head`
-    /// means the whole header.
-    ///
-    /// As mewl, encoded-words in a field body are decoded to UTF-8, and
-    /// the whole header is compared as it is. With [`Flavor::Utf8`],
-    /// the whole header is decoded, too, raw ISO-2022-JP is converted,
-    /// and a value in UTF-8 matches ignoring case (see [`contains`]).
+    /// For pick: whether a field named `key` contains `value`. The key
+    /// `head` means the whole header. How a value is decoded and
+    /// compared depends on the [`Flavor`].
     pub fn search(&mut self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
+        let case = if case_sensitive { Case::Sensitive } else { self.flavor.ignore_case() };
+
         if key == WHOLE_HEADER {
             let header = self.c_str(0, self.end_of_header());
-            return match self.flavor {
-                Flavor::Mewl => contains(header, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES),
-                Flavor::Utf8 => contains(&decode_header(header), value, case_sensitive, false),
-            };
+            return self.flavor.whole_header(header).contains_bytes(value, case);
         }
 
         let mut p = 0;
@@ -311,88 +257,16 @@ impl Header {
             let matched = self.is_field(p, key);
             let end = self.next_field(p, true);
             if matched {
-                /* Excluding the last LF. */
-                let stop = match (end.truncated, end.next) {
-                    (Some(t), _) => Some(t - 1),
-                    (None, Some(n)) => Some(n - 1),
-                    (None, None) => self.len.checked_sub(1),
-                };
-                if self.field_contains(self.c_str(p + key.len(), stop), value, case_sensitive) {
+                let body = self.c_str(p + key.len(), self.body_end(&end));
+                if self.flavor.field_body(body).contains_bytes(value, case) {
                     return true;
                 }
             }
-            match end.next {
-                Some(next) => p = next,
+            p = match end.next {
+                Some(next) => next,
                 None => return false,
-            }
+            };
         }
-    }
-
-    /// Whether `body`, which follows the key, contains `value`.
-    fn field_contains(&self, body: &[u8], value: &[u8], case_sensitive: bool) -> bool {
-        /* The field body begins after ":" if the key lacks it. */
-        let after_colon = || body.strip_prefix(b":").unwrap_or(body);
-        match self.flavor {
-            Flavor::Mewl if body.windows(2).any(|w| w == b"=?") => {
-                contains(&mime::decode_field(after_colon()), value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES)
-            }
-            Flavor::Mewl => contains(body, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES),
-            Flavor::Utf8 => contains(&mime::decode_text(after_colon()), value, case_sensitive, false),
-        }
-    }
-}
-
-/// Decodes each field of a header, keeping the line between fields.
-fn decode_header(header: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(header.len());
-    let mut beg = 0;
-    while beg < header.len() {
-        /* A field ends at a line break not followed by white space. */
-        let mut end = beg;
-        loop {
-            match header[end..].iter().position(|&c| c == b'\n') {
-                Some(i) if matches!(header.get(end + i + 1), Some(b' ' | b'\t')) => end += i + 1,
-                Some(i) => {
-                    end += i;
-                    break;
-                }
-                None => {
-                    end = header.len();
-                    break;
-                }
-            }
-        }
-        out.extend(mime::decode_text(&header[beg..end]));
-        if end < header.len() {
-            out.push(b'\n');
-        }
-        beg = end + 1;
-    }
-    out
-}
-
-/*
- * mewl compares the first character of the value with tolower(c) and
- * toupper(c). When char is signed, glibc maps -128..-1 to 128..255,
- * so a value beginning with a byte >= 0x80 never matches ignoring
- * case.
- */
-const HIGH_FIRST_BYTE_NEVER_MATCHES: bool =
-    cfg!(all(target_os = "linux", target_env = "gnu")) && CHAR_IS_SIGNED;
-
-/// `strstr()` or `strcasestr()` in the C locale. `high_never_matches`
-/// emulates glibc (see above).
-fn contains(haystack: &[u8], needle: &[u8], case_sensitive: bool, high_never_matches: bool) -> bool {
-    let Some(&first) = needle.first() else {
-        return true;
-    };
-    let mut windows = haystack.windows(needle.len());
-    if case_sensitive {
-        windows.any(|w| w == needle)
-    } else if high_never_matches && first >= 0x80 {
-        false
-    } else {
-        windows.any(|w| w.eq_ignore_ascii_case(needle))
     }
 }
 
@@ -400,33 +274,49 @@ fn contains(haystack: &[u8], needle: &[u8], case_sensitive: bool, high_never_mat
 mod tests {
     use super::*;
 
-    fn header(mut data: &[u8], field_len: i32) -> Header {
-        let mut h = Header::new(field_len, Flavor::Mewl);
+    fn header(mut data: &[u8], field_len: i32, flavor: Flavor) -> Header {
+        let mut h = Header::new(field_len, flavor);
         h.load(&mut data);
         h
     }
 
     #[test]
     fn summarize_fields_and_body() {
-        let mut h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2);
+        let mut h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2, Flavor::Mewl);
         let fields = FieldSet::parse(b"Subject:,References:");
         let s = h.summarize(&fields, 5);
         assert_eq!(h.bytes(s.fields[0].clone().unwrap()), b"Subject: a\n b\n");
         assert_eq!(h.bytes(s.fields[1].clone().unwrap()), b" <2>\n");
         let body: Vec<_> = s.body.iter().map(|l| (h.bytes(l.range.clone()).to_vec(), l.dot_stuffed)).collect();
+        /* The last byte is overwritten with LF as mewl does. */
         assert_eq!(body, [(b".dot\n".to_vec(), true), (b"line\n".to_vec(), false), (b"las\n".to_vec(), false)]);
     }
 
     #[test]
     fn search_and_value() {
-        let mut h = header(b"Subject: Hello World\nFrom: foo\n\nbody hello\n", 5);
+        let mut h = header(b"Subject: Hello World\nFrom: foo\nFrom-Address: bar\n\nbody hello\n", 5, Flavor::Mewl);
         assert!(h.search(b"subject", b"hello", false));
         assert!(!h.search(b"subject", b"hello", true));
-        assert!(!h.search(b"from", b"hello", false));
+        assert!(!h.search(b"from", b"bar", false));
+        assert!(!h.search(b"subj", b"hello", false));
         assert!(h.search(b"head", b"FOO", false));
         assert!(!h.search(b"head", b"body", false));
         let v = h.field_value(b"from:").unwrap();
         assert_eq!(h.bytes(v), b" foo");
         assert!(h.field_value(b"to:").is_none());
+    }
+
+    #[test]
+    fn search_decoded() {
+        let data = "Subject: =?UTF-8?B?5pel5pys6Kqe?=\nX: Re:=?UTF-8?B?5pel?=\n\n".as_bytes();
+        let mut mewl = header(data, 5, Flavor::Mewl);
+        let mut utf8 = header(data, 5, Flavor::Utf8);
+        assert!(mewl.search(b"subject", "日本".as_bytes(), true));
+        assert_eq!(mewl.search(b"subject", "日本".as_bytes(), false), !crate::compat::GLIBC);
+        assert!(utf8.search(b"subject", "日本".as_bytes(), false));
+        assert!(!mewl.search(b"x", "日".as_bytes(), true));
+        assert!(utf8.search(b"x", "Re:日".as_bytes(), true));
+        assert!(!mewl.search(b"head", "日本".as_bytes(), true));
+        assert!(utf8.search(b"head", "日本".as_bytes(), true));
     }
 }

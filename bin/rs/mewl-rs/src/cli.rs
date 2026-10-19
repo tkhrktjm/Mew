@@ -8,8 +8,12 @@
 use std::io::{self, Write};
 
 use crate::compat::atoi;
-use crate::error::{Error, Result, fatal};
-use crate::folder::FolderRange;
+use crate::error::{Error, Result};
+use crate::folder::{FolderRange, Navigator};
+use crate::header::FieldSet;
+use crate::pattern::Pattern;
+use crate::printer::Mode;
+use crate::source::Settings;
 
 const VERSION: &str = "version 6.11 20260414 Mew developing team";
 
@@ -44,25 +48,6 @@ Default is mdir = ~/Mail,
 length = 5, folder = +inbox, range = 0, bodylen = 20
 field = Subject:,Date:,From:,To:,Cc:,Content-Type:,Content-Transfer-Encoding:,X-Mew-UIDL:,Message-ID:,In-Reply-To:,References:,X-Mew-Ref:
 ";
-
-/// What this program does depends on the name it is invoked as.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Flavor {
-    /// `mewl-rs` (and any other name): the same as mewl, which decodes
-    /// encoded-words in a field body searched by pick.
-    Mewl,
-    /// `mewl-rs-utf8`: in addition, the value printed by sort (`-d`)
-    /// and the whole header searched by pick (`head`) are decoded, raw
-    /// ISO-2022-JP is converted, and a value in UTF-8 matches ignoring
-    /// case on glibc, too.
-    Utf8,
-}
-
-impl Flavor {
-    pub fn from_program_name(name: &[u8]) -> Self {
-        if name == b"mewl-rs-utf8" { Flavor::Utf8 } else { Flavor::Mewl }
-    }
-}
 
 pub enum Command {
     Help,
@@ -126,12 +111,12 @@ impl Default for Options {
 }
 
 impl Options {
-    /// The folders to be scanned, and whether the folder is the
-    /// default one, that is, no folder is specified.
+    /// The folders to be scanned (`-s` or operands), and whether the
+    /// folder is the default one, that is, no folder is specified.
     pub fn folder_ranges(&self) -> Result<(Vec<FolderRange>, bool)> {
         if !self.sources.is_empty() {
             if !self.operands.is_empty() {
-                return Err(fatal!("the 's' option can't co-exist with arguments."));
+                return Err(Error::SourceWithOperands);
             }
             return Ok((self.sources.clone(), false));
         }
@@ -140,6 +125,28 @@ impl Options {
             [folder] => Ok((vec![FolderRange::parse(Some(folder), None)], false)),
             [folder, range] => Ok((vec![FolderRange::parse(Some(folder), Some(range))], false)),
             _ => Err(Error::Usage),
+        }
+    }
+
+    /// What is printed: pick (`-p`), sort (`-d`), or scan.
+    pub fn mode(&self) -> Result<Mode> {
+        Ok(match (&self.pattern, &self.sort_key) {
+            (Some(pattern), _) => Mode::Pick { pattern: Pattern::parse(pattern)?, all_fields: self.all_fields },
+            (None, Some(key)) => Mode::Sort { key: key.clone() },
+            (None, None) => Mode::Scan,
+        })
+    }
+
+    /// The fields that scan prints (`-f`).
+    pub fn field_set(&self) -> FieldSet {
+        FieldSet::parse(self.fields.as_deref().unwrap_or(FieldSet::DEFAULT))
+    }
+
+    pub fn settings(&self, is_default: bool) -> Settings {
+        Settings {
+            navigator: Navigator::new(self.mail_home.clone()),
+            suffix: self.suffix.clone(),
+            is_default,
         }
     }
 }
@@ -151,15 +158,15 @@ pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
     while let Some(arg) = args.next_if(|a| a.len() >= 2 && a[0] == b'-') {
         let (c, rest) = (arg[1], &arg[2..]);
         if !rest.is_empty() {
-            return Err(fatal!("unknown long option '", arg, "'."));
+            return Err(Error::UnknownLongOption(arg.clone()));
         }
         let Some(pos) = OPTSTRING.iter().position(|&o| o == c) else {
-            return Err(fatal!("unknown option '-", [c], "'."));
+            return Err(Error::UnknownOption(c));
         };
         let optarg = if OPTSTRING.get(pos + 1) == Some(&b':') {
             match args.next() {
                 Some(a) => a.clone(),
-                None => return Err(fatal!("no parameter for '-", [c], "'.")),
+                None => return Err(Error::NoParameter(c)),
             }
         } else {
             Vec::new()
@@ -180,7 +187,7 @@ pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
             b'p' => opts.pattern = Some(optarg),
             b's' => {
                 if opts.sources.len() >= MAX_FOLDER {
-                    return Err(fatal!("too many folders."));
+                    return Err(Error::TooManyFolders);
                 }
                 opts.sources.push(FolderRange::parse(Some(&optarg), None));
             }
