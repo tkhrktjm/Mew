@@ -19,6 +19,7 @@ pub use folders::FolderScanner;
 pub use list::ListReader;
 
 use crate::error::{Error, Result};
+use crate::flavor::Flavor;
 use crate::folder::Navigator;
 
 const MAX_FILE_NAME_LEN: usize = libc::PATH_MAX as usize;
@@ -44,6 +45,7 @@ pub struct Settings {
     pub suffix: Vec<u8>,
     /// No folder is specified, so the folder is the default one.
     pub is_default: bool,
+    pub flavor: Flavor,
 }
 
 pub enum Source {
@@ -63,8 +65,8 @@ impl Iterator for Source {
 }
 
 /// Tells whether a message is a regular file (unless `-n`).
-#[derive(Default)]
 pub struct RegularFileCheck {
+    flavor: Flavor,
     /// mewl keeps the previous mode if `fstat()` fails.
     mode: u32,
 }
@@ -73,10 +75,19 @@ impl RegularFileCheck {
     /// The `S_IFREG` bit of `st_mode`.
     const S_IFREG: u32 = 0o100000;
 
+    pub fn new(flavor: Flavor) -> Self {
+        RegularFileCheck { flavor, mode: 0 }
+    }
+
     /// mewl tests the `S_IFREG` bit, not the file type, so a socket
-    /// passes, for instance.
+    /// passes, for instance. `mewl-rs` tests the file type, and a file
+    /// whose type is unknown is not regular.
     pub fn is_regular(&mut self, file: &File) -> bool {
-        if let Ok(meta) = file.metadata() {
+        let meta = file.metadata();
+        if self.flavor.fixes_bugs() {
+            return meta.is_ok_and(|m| m.file_type().is_file());
+        }
+        if let Ok(meta) = meta {
             self.mode = meta.mode();
         }
         self.mode & Self::S_IFREG != 0

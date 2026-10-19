@@ -17,9 +17,8 @@ pub enum Flavor {
     /// and the whole header searched by pick (`head`) are decoded,
     /// encoded-words are found anywhere and a character split between
     /// them is restored, raw ISO-2022-JP is converted, and a value in
-    /// UTF-8 matches ignoring case on glibc, too. Some bugs of mewl
-    /// are fixed: the last line of a message is kept, and a pattern is
-    /// parsed strictly.
+    /// UTF-8 matches ignoring case on glibc, too. Bugs of mewl which
+    /// do not need Mew to change are fixed (see [`Flavor::fixes_bugs`]).
     Utf8,
 }
 
@@ -39,10 +38,9 @@ impl Flavor {
         }
     }
 
-    /// Whether the last line of a message is kept as it is. mewl
-    /// overwrites the last byte with LF if it is not, and does not
-    /// escape the last line of the body beginning with `.`.
-    pub(crate) fn keeps_last_line(self) -> bool {
+    /// Whether bugs of mewl that `mewl-rs` fixes are fixed. Each place
+    /// where this matters tells which bug.
+    pub(crate) fn fixes_bugs(self) -> bool {
         self == Flavor::Utf8
     }
 

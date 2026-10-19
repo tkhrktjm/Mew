@@ -53,6 +53,25 @@ It also fixes some bugs of `mewl`:
   or `abc`, is an error ("broken pattern."), while `mewl` silently
   evaluates its first part. A word followed by `=` is the key of
   another comparison, not a part of the value.
+- Nothing beyond a message is read. `mewl` reads what the previous
+  message left in its buffer, so an empty message may match
+  `head=val`, and a short message may show a field which it lacks.
+- A message beginning with an empty line has an empty header. `mewl`
+  takes its body for the header.
+- A line with NUL in the list of `-i` does not hide the next line.
+- A number in a range and of `-c` and `-l` must be a decimal number;
+  `mewl` reads garbage as 0 and wraps a negative number around, so
+  `last:-3` means all. The error is "invalid range" or "invalid
+  number".
+- A file whose number is too large for `unsigned int` is not a
+  message. A message must be a regular file.
+- The value of `-d key` without `:` does not begin with `:`.
+- 0xFF in a pattern is a byte, not the end of the pattern.
+- `-:` is an unknown option, and the help shows the argument of `-x`.
+
+Bugs that need Mew to change are not fixed: for instance, Mew does not
+see the exit status nor the error messages of `mewl`, and passes a
+value with `&`, `|`, `(`, `)`, `!`, or `"` as it is.
 
 Otherwise it is the same as `mewl-rs-compat`. The output of scan is
 the same as `mewl`'s since Mew decodes it. Tell Mew to use it:

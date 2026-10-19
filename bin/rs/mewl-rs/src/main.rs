@@ -49,16 +49,16 @@ fn main() -> ExitCode {
     let reporter = Reporter::new(progname);
 
     let mut out = Output::new();
-    let result = cli::parse(&argv).and_then(|command| match command {
+    let result = cli::parse(&argv, flavor).and_then(|command| match command {
         Command::Help => {
-            cli::help(reporter.progname());
+            cli::help(reporter.progname(), flavor);
             Ok(())
         }
         Command::Version => {
             cli::version(reporter.progname());
             Ok(())
         }
-        Command::Run(opts) => run(&opts, flavor, &reporter, &mut out),
+        Command::Run(opts) => run(&opts, &reporter, &mut out),
     });
     out.flush();
 
@@ -75,10 +75,11 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(opts: &Options, flavor: Flavor, reporter: &Reporter, out: &mut Output) -> Result<()> {
+fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
+    let flavor = opts.flavor;
     let (ranges, is_default) = opts.folder_ranges()?;
     let fields = opts.field_set();
-    let mode = opts.mode(flavor)?;
+    let mode = opts.mode()?;
     let count = opts.fields.is_some() && !matches!(mode, printer::Mode::Pick { .. });
 
     /* With -w, a byte from stdin is awaited after each record. This
@@ -100,7 +101,7 @@ fn run(opts: &Options, flavor: Flavor, reporter: &Reporter, out: &mut Output) ->
     };
 
     let mut printer = Printer::new(mode, fields, opts.body_len, opts.field_len, flavor);
-    let mut regular = RegularFileCheck::default();
+    let mut regular = RegularFileCheck::new(flavor);
     for entry in source {
         match entry? {
             Entry::Count(n) => out.put(format!("NumOfMsg: {n}\n").as_bytes()).flush(),
