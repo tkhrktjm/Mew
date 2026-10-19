@@ -11,7 +11,7 @@ use crate::compat::atoi;
 use crate::error::{Error, Result};
 use crate::folder::{FolderRange, Navigator};
 use crate::header::FieldSet;
-use crate::pattern::Pattern;
+use crate::flavor::Flavor;
 use crate::printer::Mode;
 use crate::source::Settings;
 
@@ -129,9 +129,9 @@ impl Options {
     }
 
     /// What is printed: pick (`-p`), sort (`-d`), or scan.
-    pub fn mode(&self) -> Result<Mode> {
+    pub fn mode(&self, flavor: Flavor) -> Result<Mode> {
         Ok(match (&self.pattern, &self.sort_key) {
-            (Some(pattern), _) => Mode::Pick { pattern: Pattern::parse(pattern)?, all_fields: self.all_fields },
+            (Some(pattern), _) => Mode::Pick { pattern: flavor.parse_pattern(pattern)?, all_fields: self.all_fields },
             (None, Some(key)) => Mode::Sort { key: key.clone() },
             (None, None) => Mode::Scan,
         })
