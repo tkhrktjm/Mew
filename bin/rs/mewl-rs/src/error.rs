@@ -18,6 +18,10 @@ pub enum Error {
     UnknownOption(u8),
     NoParameter(u8),
     TooManyFolders,
+    /// A range not as `N | [start]-[end] | last:N`.
+    InvalidRange(Vec<u8>),
+    /// An argument of `-c` or `-l` not a number.
+    InvalidNumber(Vec<u8>),
     /// `-s` with folder operands.
     SourceWithOperands,
     NoHomeDirectory,
@@ -46,6 +50,8 @@ impl Error {
             Error::UnknownOption(c) => quoted("unknown option '-", &[*c], "'."),
             Error::NoParameter(c) => quoted("no parameter for '-", &[*c], "'."),
             Error::TooManyFolders => b"too many folders.".to_vec(),
+            Error::InvalidRange(range) => quoted("invalid range '", range, "'."),
+            Error::InvalidNumber(num) => quoted("invalid number '", num, "'."),
             Error::SourceWithOperands => b"the 's' option can't co-exist with arguments.".to_vec(),
             Error::NoHomeDirectory => b"failed in getting home directory.".to_vec(),
             Error::HomeUnknown => b"can't change directory to home.".to_vec(),

@@ -7,7 +7,7 @@ use std::vec;
 use super::{Entry, Message, Settings, open};
 use crate::compat::atoi;
 use crate::error::{Error, Result};
-use crate::folder::FolderRange;
+use crate::folder::{FolderRange, parse_number};
 
 pub struct FolderScanner {
     ranges: vec::IntoIter<FolderRange>,
@@ -58,7 +58,10 @@ impl FolderScanner {
                 let name = entry.file_name();
                 let name = name.as_bytes();
                 let num = self.message_number(name)?;
-                range.contains(num).then(|| atoi(name) as u32)
+                /* mewl reads the number again by atoi(), which may
+                differ from num if it overflows. */
+                let num_read = if self.settings.flavor.fixes_bugs() { num } else { atoi(name) as u32 };
+                range.contains(num).then_some(num_read)
             })
             .collect();
         numbers.sort_unstable();
@@ -75,14 +78,22 @@ impl FolderScanner {
     }
 
     /// The number of a message file: digits optionally followed by
-    /// the suffix. It overflows like int in C.
+    /// the suffix. In mewl, it overflows like int in C; in `mewl-rs`, a
+    /// file with a number too large is not a message.
     fn message_number(&self, name: &[u8]) -> Option<u32> {
         let digits = name.iter().take_while(|c| c.is_ascii_digit()).count();
-        let num = name[..digits]
-            .iter()
-            .fold(0i32, |n, &c| n.wrapping_mul(10).wrapping_add(i32::from(c - b'0')));
         let rest = &name[digits..];
-        (num != 0 && (rest.is_empty() || rest == self.settings.suffix)).then_some(num as u32)
+        if !(rest.is_empty() || rest == self.settings.suffix) {
+            return None;
+        }
+        let num = if self.settings.flavor.fixes_bugs() {
+            parse_number(&name[..digits])?
+        } else {
+            name[..digits]
+                .iter()
+                .fold(0i32, |n, &c| n.wrapping_mul(10).wrapping_add(i32::from(c - b'0'))) as u32
+        };
+        (num != 0).then_some(num)
     }
 }
 

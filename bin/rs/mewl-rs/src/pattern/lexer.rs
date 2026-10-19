@@ -45,21 +45,25 @@ pub struct Lexer<'a> {
     pos: usize,
     /// The token just read ended at a blank, which is consumed.
     blank_ended: bool,
+    /// Without the bugs of mewl in reading (see [`Lexer::getc`] and
+    /// the comparisons in [`Lexer::read_token`]).
+    strict: bool,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'a [u8]) -> Self {
-        Lexer { input, pos: 0, blank_ended: false }
+    pub fn new(input: &'a [u8], strict: bool) -> Self {
+        Lexer { input, pos: 0, blank_ended: false, strict }
     }
 
     /// The next character, `None` at the end.
     ///
     /// When `char` is signed, the byte 0xff is `EOF` (-1) in mewl.
-    /// It is consumed nevertheless, so reading can go on after it.
+    /// It is consumed nevertheless, so reading can go on after it. Not
+    /// so when strict.
     fn getc(&mut self) -> Option<u8> {
         let c = *self.input.get(self.pos)?;
         self.pos += 1;
-        (!(CHAR_IS_SIGNED && c == 0xff)).then_some(c)
+        (self.strict || !(CHAR_IS_SIGNED && c == 0xff)).then_some(c)
     }
 
     /// Steps back even after the end, as `Ungetc()` does.
@@ -123,14 +127,15 @@ impl<'a> Lexer<'a> {
                 b'&' if kind == Kind::And => {}
                 b'|' if kind == Kind::Or => {}
                 b'=' if kind == Kind::Cmp(Cmp::Eq) => kind = Kind::Cmp(Cmp::EqCase),
-                b'=' if kind == Kind::Not => {
-                    if self.getc() == Some(b'=') {
-                        kind = Kind::Cmp(Cmp::NeCase);
-                    } else {
+                b'=' if kind == Kind::Not => match self.getc() {
+                    Some(b'=') => kind = Kind::Cmp(Cmp::NeCase),
+                    /* mewl steps back even at the end. */
+                    None if self.strict => kind = Kind::Cmp(Cmp::Ne),
+                    _ => {
                         kind = Kind::Cmp(Cmp::Ne);
                         self.ungetc()?;
                     }
-                }
+                },
                 b'&' | b'|' | b'!' | b'=' | b'(' | b')' => self.ungetc()?,
                 _ if kind != Kind::Str => self.ungetc()?,
                 b'\\' => {
@@ -182,7 +187,7 @@ mod tests {
     use super::*;
 
     fn tokens(p: &[u8]) -> Vec<Token> {
-        Lexer::new(p).map(|t| t.map(|t| t.token)).collect::<Result<_>>().unwrap()
+        Lexer::new(p, false).map(|t| t.map(|t| t.token)).collect::<Result<_>>().unwrap()
     }
 
     #[test]
@@ -198,8 +203,22 @@ mod tests {
     }
 
     #[test]
+    fn strict() {
+        let strict = |p: &[u8]| Lexer::new(p, true).map(|t| t.map(|t| t.token)).collect::<Result<Vec<_>>>().unwrap();
+        /* 0xff is a byte, not the end. */
+        assert_eq!(strict(b"a=\xffb"), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"\xffb".to_vec())]);
+        if CHAR_IS_SIGNED {
+            /* mewl drops it, ending the token before it. */
+            assert_eq!(tokens(b"a=\xffb"), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"b".to_vec())]);
+        }
+        /* "!=" at the end. */
+        assert_eq!(strict(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne)]);
+        assert_eq!(tokens(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne), Token::Cmp(Cmp::Eq)]);
+    }
+
+    #[test]
     fn spans() {
-        let spans: Vec<_> = Lexer::new(br#" key = "v w"  x&y"#).map(|t| t.unwrap().span).collect();
+        let spans: Vec<_> = Lexer::new(br#" key = "v w"  x&y"#, false).map(|t| t.unwrap().span).collect();
         assert_eq!(spans, [1..4, 5..6, 7..12, 14..15, 15..16, 16..17]);
     }
 }

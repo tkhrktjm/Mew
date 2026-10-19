@@ -55,7 +55,7 @@ struct Parser {
 ///   `(a=b c)`, is an error, of which mewl evaluates the first part
 ///   only.
 pub fn parse(pattern: &[u8], strict: bool) -> Result<Expr> {
-    let mut tokens = Lexer::new(pattern).collect::<Result<Vec<_>>>()?;
+    let mut tokens = Lexer::new(pattern, strict).collect::<Result<Vec<_>>>()?;
     if strict {
         tokens = join_values(tokens, pattern);
     }
