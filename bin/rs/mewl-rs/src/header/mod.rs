@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn summarize_fields_and_body() {
-        let mut h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2, Flavor::Mewl);
+        let mut h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2, Flavor::Compat);
         let fields = FieldSet::parse(b"Subject:,References:");
         let s = h.summarize(&fields, 5);
         assert_eq!(h.bytes(s.fields[0].clone().unwrap()), b"Subject: a\n b\n");
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn search_and_value() {
-        let mut h = header(b"Subject: Hello World\nFrom: foo\nFrom-Address: bar\n\nbody hello\n", 5, Flavor::Mewl);
+        let mut h = header(b"Subject: Hello World\nFrom: foo\nFrom-Address: bar\n\nbody hello\n", 5, Flavor::Compat);
         assert!(h.search(b"subject", b"hello", false));
         assert!(!h.search(b"subject", b"hello", true));
         assert!(!h.search(b"from", b"bar", false));
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn search_decoded() {
         let data = "Subject: =?UTF-8?B?5pel5pys6Kqe?=\nX: Re:=?UTF-8?B?5pel?=\n\n".as_bytes();
-        let mut mewl = header(data, 5, Flavor::Mewl);
+        let mut mewl = header(data, 5, Flavor::Compat);
         let mut utf8 = header(data, 5, Flavor::Utf8);
         assert!(mewl.search(b"subject", "日本".as_bytes(), true));
         assert_eq!(mewl.search(b"subject", "日本".as_bytes(), false), !crate::compat::GLIBC);

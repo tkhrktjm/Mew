@@ -12,7 +12,8 @@
 //! differently, e.g. 0x8160 of Shift_JIS is U+301C by glibc but U+FF5E
 //! here.
 //!
-//! [`decode_text`] is for mewl-rs-utf8 and more lenient:
+//! [`decode_text`] is for `mewl-rs` (not `mewl-rs-compat`) and more
+//! lenient:
 //!
 //! - An encoded-word is found anywhere, e.g. in `Re:=?UTF-8?B?...?=`.
 //! - Adjacent encoded-words in the same charset are converted together

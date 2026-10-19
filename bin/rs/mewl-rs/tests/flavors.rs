@@ -1,6 +1,6 @@
-//! `mewl-rs-utf8` decodes header values for sort and pick more than
-//! `mewl-rs`, which behaves as mewl. `mewl-rs` invoked by the name
-//! `mewl-rs-utf8` is the same as `mewl-rs-utf8`.
+//! `mewl-rs` decodes header values for sort and pick more than
+//! `mewl-rs-compat`, which behaves as mewl. Which one it is depends on
+//! the name it is invoked by, through a link for instance.
 
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -27,17 +27,24 @@ impl Fixture {
         for (i, m) in messages.iter().enumerate() {
             fs::write(inbox.join((i + 1).to_string()), m).unwrap();
         }
+
+        let bin = env!("CARGO_BIN_EXE_mewl-rs");
         fs::create_dir(dir.join("link")).unwrap();
-        symlink(env!("CARGO_BIN_EXE_mewl-rs"), dir.join("link/mewl-rs-utf8")).unwrap();
+        for name in ["mewl-rs", "mewl-rs-compat", "mewl"] {
+            symlink(bin, dir.join("link").join(name)).unwrap();
+        }
+        /* Like a hard link, which cannot be made across file systems. */
+        fs::create_dir(dir.join("copy")).unwrap();
+        fs::copy(bin, dir.join("copy/mewl-rs-compat")).unwrap();
         Fixture { dir }
     }
 
-    /// Runs `mewl-rs`, `mewl-rs-utf8`, or `link/mewl-rs-utf8`, which is
-    /// `mewl-rs` linked by the name.
+    /// Runs `mewl-rs`, or it through a link or a copy at `prog`, e.g.
+    /// `link/mewl-rs-compat`. `mewl-rs-compat` is short for that.
     fn run(&self, prog: &str, args: &[&str]) -> String {
         let path = match prog {
             "mewl-rs" => PathBuf::from(env!("CARGO_BIN_EXE_mewl-rs")),
-            "mewl-rs-utf8" => PathBuf::from(env!("CARGO_BIN_EXE_mewl-rs-utf8")),
+            "mewl-rs-compat" => self.dir.join("link/mewl-rs-compat"),
             _ => self.dir.join(prog),
         };
         let out = Command::new(path)
@@ -61,40 +68,40 @@ impl Drop for Fixture {
 fn sort_decodes_values() {
     let f = Fixture::new("sort");
     assert_eq!(
-        f.run("mewl-rs-utf8", &["-l", "0", "-d", "subject:", "+inbox"]),
+        f.run("mewl-rs", &["-l", "0", "-d", "subject:", "+inbox"]),
         "1: 日本語の件名\n2: 日本語の日本\n3: plain English\n4: Re: 日本語 (2)\n5: Re:日本語\n"
     );
     assert_eq!(
-        f.run("mewl-rs", &["-l", "0", "-d", "subject:", "+inbox", "1"]),
+        f.run("mewl-rs-compat", &["-l", "0", "-d", "subject:", "+inbox", "1"]),
         "1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n"
     );
-    assert_eq!(f.run("mewl-rs-utf8", &["-d", "from:", "+inbox", "1"]), "1: 山田 <yamada@example.com>\n");
+    assert_eq!(f.run("mewl-rs", &["-d", "from:", "+inbox", "1"]), "1: 山田 <yamada@example.com>\n");
 }
 
 #[test]
 fn pick_searches_decoded_values() {
     let f = Fixture::new("pick");
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "subject=日本語", "+inbox"]), "1\n2\n4\n5\n");
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "subject==日本語の日本", "+inbox"]), "2\n");
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "from=山田 | subject=english", "+inbox"]), "1\n3\n");
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "head=件名", "+inbox"]), "1\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=日本語", "+inbox"]), "1\n2\n4\n5\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject==日本語の日本", "+inbox"]), "2\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "from=山田 | subject=english", "+inbox"]), "1\n3\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "head=件名", "+inbox"]), "1\n");
     /* Only the header is searched. */
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "head=\"日本語 in body\"", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs", &["-p", "head=\"日本語 in body\"", "+inbox"]), "");
 }
 
 #[test]
-fn mewl_decodes_fields_when_picking() {
-    let f = Fixture::new("mewl");
+fn compat_decodes_fields_when_picking() {
+    let f = Fixture::new("compat");
     /* An encoded-word has to be a word by itself, and is converted by
     itself. */
-    assert_eq!(f.run("mewl-rs", &["-p", "subject==日本語", "+inbox"]), "1\n2\n4\n");
-    assert_eq!(f.run("mewl-rs", &["-p", "from==山田", "+inbox"]), "1\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject==日本語", "+inbox"]), "1\n2\n4\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "from==山田", "+inbox"]), "1\n");
     /* but not the whole header. */
-    assert_eq!(f.run("mewl-rs", &["-p", "head==件名", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "head==件名", "+inbox"]), "");
     /* mewl on glibc never matches a value beginning with a byte >= 0x80
     ignoring case. */
     if cfg!(all(target_os = "linux", target_env = "gnu")) {
-        assert_eq!(f.run("mewl-rs", &["-p", "subject=日本語", "+inbox"]), "");
+        assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=日本語", "+inbox"]), "");
     }
 }
 
@@ -102,23 +109,29 @@ fn mewl_decodes_fields_when_picking() {
 fn key_names_a_field() {
     let f = Fixture::new("key");
     /* "subj" is not "Subject:", and "from" is not "From-Address:". */
-    assert_eq!(f.run("mewl-rs", &["-p", "subj=plain", "+inbox"]), "");
-    assert_eq!(f.run("mewl-rs", &["-p", "subject=plain", "+inbox"]), "3\n");
-    assert_eq!(f.run("mewl-rs", &["-p", "subject:=plain", "+inbox"]), "3\n");
-    assert_eq!(f.run("mewl-rs", &["-d", "from", "+inbox", "3"]), "3:: bar@example.com\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subj=plain", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=plain", "+inbox"]), "3\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject:=plain", "+inbox"]), "3\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-d", "from", "+inbox", "3"]), "3:: bar@example.com\n");
 }
 
 #[test]
 fn invoked_by_name() {
-    let f = Fixture::new("link");
-    for args in [&["-p", "subject=日本語", "+inbox"][..], &["-l", "0", "-d", "subject:", "+inbox"], &["+inbox"]] {
-        assert_eq!(f.run("link/mewl-rs-utf8", args), f.run("mewl-rs-utf8", args));
-    }
+    let f = Fixture::new("name");
+    let args = ["-l", "0", "-d", "subject:", "+inbox"];
+    let decoded = f.run("mewl-rs", &args);
+    let compat = f.run("link/mewl-rs-compat", &args);
+    assert_ne!(decoded, compat);
+    /* mewl-rs through a link is still mewl-rs. */
+    assert_eq!(f.run("link/mewl-rs", &args), decoded);
+    /* Any other name, as a drop-in replacement, is mewl-rs-compat. */
+    assert_eq!(f.run("link/mewl", &args), compat);
+    assert_eq!(f.run("copy/mewl-rs-compat", &args), compat);
 }
 
 #[test]
 fn scan_is_not_decoded() {
     let f = Fixture::new("scan");
-    assert_eq!(f.run("mewl-rs-utf8", &["+inbox"]), f.run("mewl-rs", &["+inbox"]));
-    assert!(f.run("mewl-rs-utf8", &["+inbox", "1"]).contains("Subject: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n"));
+    assert_eq!(f.run("mewl-rs", &["+inbox"]), f.run("mewl-rs-compat", &["+inbox"]));
+    assert!(f.run("mewl-rs", &["+inbox", "1"]).contains("Subject: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n"));
 }
