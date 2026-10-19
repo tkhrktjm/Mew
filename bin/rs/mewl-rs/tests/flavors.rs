@@ -135,3 +135,49 @@ fn scan_is_not_decoded() {
     assert_eq!(f.run("mewl-rs", &["+inbox"]), f.run("mewl-rs-compat", &["+inbox"]));
     assert!(f.run("mewl-rs", &["+inbox", "1"]).contains("Subject: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n"));
 }
+
+#[test]
+fn last_line_kept() {
+    let f = Fixture::new("last");
+    fs::write(f.dir.join("Mail/inbox/6"), b"Subject: no newline").unwrap();
+    fs::write(f.dir.join("Mail/inbox/7"), b"Subject: x\n\nline\n.").unwrap();
+    assert_eq!(f.run("mewl-rs", &["-d", "subject:", "+inbox", "6"]), "6: no newline\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-d", "subject:", "+inbox", "6"]), "6: no newlin\n\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject==newline", "+inbox"]), "6\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject==newline", "+inbox"]), "");
+    /* The last line of the body is escaped, too. */
+    assert!(f.run("mewl-rs", &["+inbox", "7"]).ends_with("\nline\n..\n.\n"));
+    assert!(f.run("mewl-rs-compat", &["+inbox", "7"]).ends_with("\nline\n\n.\n"));
+}
+
+#[test]
+fn pattern_values_with_blanks() {
+    let f = Fixture::new("blanks");
+    /* Mew passes subject=plain English for subject='plain English'. */
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=plain English", "+inbox"]), "3\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=plain Japanese", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=plain Japanese", "+inbox"]), "3\n");
+}
+
+#[test]
+fn broken_patterns_refused() {
+    let f = Fixture::new("broken");
+    for (prog, pattern, expected) in [
+        ("mewl-rs", "subject=plain from=zzz", Some("mewl-rs: broken pattern.\n")),
+        ("mewl-rs", "(subject=plain from=zzz)", Some("mewl-rs: broken pattern.\n")),
+        ("mewl-rs", "plain", Some("mewl-rs: broken pattern.\n")),
+        ("mewl-rs-compat", "subject=plain from=zzz", None),
+    ] {
+        let out = Command::new(f.dir.join("link").join(prog))
+            .args(["-b", f.dir.join("Mail").to_str().unwrap(), "-p", pattern, "+inbox"])
+            .output()
+            .unwrap();
+        match expected {
+            Some(message) => {
+                assert_eq!(String::from_utf8_lossy(&out.stderr), message);
+                assert!(!out.status.success());
+            }
+            None => assert_eq!((String::from_utf8_lossy(&out.stdout).as_ref(), out.status.success()), ("3\n", true)),
+        }
+    }
+}

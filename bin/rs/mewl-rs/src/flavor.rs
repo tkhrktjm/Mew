@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use crate::bytes::{BytesExt, Case};
 use crate::compat::GLIBC;
 use crate::mime;
+use crate::pattern::{Pattern, PatternError};
 
 /// What the program does, which depends on the name it is invoked as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,7 +17,9 @@ pub enum Flavor {
     /// and the whole header searched by pick (`head`) are decoded,
     /// encoded-words are found anywhere and a character split between
     /// them is restored, raw ISO-2022-JP is converted, and a value in
-    /// UTF-8 matches ignoring case on glibc, too.
+    /// UTF-8 matches ignoring case on glibc, too. Some bugs of mewl
+    /// are fixed: the last line of a message is kept, and a pattern is
+    /// parsed strictly.
     Utf8,
 }
 
@@ -25,6 +28,22 @@ impl Flavor {
         /* Any other name, e.g. "mewl" as a drop-in replacement, is
         the same as mewl. */
         if name == b"mewl-rs" { Flavor::Utf8 } else { Flavor::Compat }
+    }
+
+    /// Parses a pick pattern. `mewl-rs` refuses a broken pattern, and
+    /// takes words not quoted after a value as a part of it.
+    pub(crate) fn parse_pattern(self, pattern: &[u8]) -> Result<Pattern, PatternError> {
+        match self {
+            Flavor::Compat => Pattern::parse(pattern),
+            Flavor::Utf8 => Pattern::parse_strict(pattern),
+        }
+    }
+
+    /// Whether the last line of a message is kept as it is. mewl
+    /// overwrites the last byte with LF if it is not, and does not
+    /// escape the last line of the body beginning with `.`.
+    pub(crate) fn keeps_last_line(self) -> bool {
+        self == Flavor::Utf8
     }
 
     /// How `key=val` compares ignoring case.

@@ -28,6 +28,8 @@ pub enum PatternError {
     BrokenAndOr,
     /// Found only when evaluated.
     BrokenTree,
+    /// Not one expression, in the strict syntax.
+    Broken,
 }
 
 impl PatternError {
@@ -44,6 +46,7 @@ impl PatternError {
             PatternError::BrokenNot => "broken not.",
             PatternError::BrokenAndOr => "broken and/or.",
             PatternError::BrokenTree => "broken tree.",
+            PatternError::Broken => "broken pattern.",
         }
     }
 }
@@ -94,8 +97,14 @@ pub enum Expr {
 pub struct Pattern(Expr);
 
 impl Pattern {
+    /// Parses a pattern as mewl does.
     pub fn parse(pattern: &[u8]) -> Result<Self> {
-        parser::parse(pattern).map(Pattern)
+        parser::parse(pattern, false).map(Pattern)
+    }
+
+    /// Parses a pattern more strictly (see [`parser::parse`]).
+    pub fn parse_strict(pattern: &[u8]) -> Result<Self> {
+        parser::parse(pattern, true).map(Pattern)
     }
 
     /// Evaluates the pattern from left to right with short circuit.
@@ -141,6 +150,27 @@ mod tests {
         assert_eq!(eval(b"abc=x | abc=c"), Ok(true));
         assert_eq!(eval(b"abc=x | abc=c & abc=y"), Ok(false));
         assert_eq!(eval(b"!(abc=x | abc=c) | abc=a"), Ok(true));
+    }
+
+    fn eval_strict(pattern: &[u8]) -> Result<bool> {
+        /* The field "abc def" contains its substrings. */
+        Pattern::parse_strict(pattern)?.matches(&mut |_, v, _| b"abc  def".windows(v.len()).any(|w| w == v))
+    }
+
+    #[test]
+    fn strict() {
+        /* Words after a value are a part of it, with the blanks. */
+        assert_eq!(eval_strict(b"subject=abc  def"), Ok(true));
+        assert_eq!(eval_strict(b"subject=abc def"), Ok(false));
+        assert_eq!(eval_strict(b"subject=abc  def | x=zzz"), Ok(true));
+        assert_eq!(eval_strict(b"(subject=abc  def)"), Ok(true));
+        /* but a key is not. */
+        assert_eq!(eval_strict(b"a=abc c=zzz"), Err(PatternError::Broken));
+        assert_eq!(eval_strict(b"(a=abc c=zzz)"), Err(PatternError::Broken));
+        assert_eq!(eval_strict(b"abc"), Err(PatternError::Broken));
+        assert_eq!(eval_strict(b"a=abc !def"), Err(PatternError::BrokenNot));
+        /* mewl evaluates the first part only. */
+        assert_eq!(eval(b"abc=a abc=z"), Ok(true));
     }
 
     #[test]
