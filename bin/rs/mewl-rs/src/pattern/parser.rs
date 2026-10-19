@@ -7,7 +7,7 @@
 //! accepted in the same way. The nodes live in an arena and links are
 //! indices. The result is converted to [`Expr`].
 
-use crate::error::{Result, fatal};
+use super::{PatternError, Result};
 
 use super::lexer::{Lexer, Token};
 use super::{Cmp, Expr};
@@ -119,7 +119,7 @@ impl Parser {
             };
             let (p, r) = (self.nodes[qi].prev, self.nodes[qi].next);
             if self.kind(p) != Some(Kind::Str) || self.kind(r) != Some(Kind::Str) {
-                return Err(fatal!("broken eq/neq."));
+                return Err(PatternError::BrokenComparison);
             }
             let (p, r) = (p.expect("checked"), r.expect("checked"));
             let n = self.push(Kind::Cmp(cmp));
@@ -139,7 +139,7 @@ impl Parser {
     /// Creates an expression tree.
     fn expression(&mut self, top: Link) -> Result<usize> {
         let Some(top) = top else {
-            return Err(fatal!("invalid pattern."));
+            return Err(PatternError::Empty);
         };
         let top = self.parentheses(top)?;
         let top = self.negations(top)?;
@@ -170,12 +170,12 @@ impl Parser {
                 Kind::RParen => {
                     level -= 1;
                     if level < 0 {
-                        return Err(fatal!("too many ')'."));
+                        return Err(PatternError::TooManyClosing);
                     }
                     if level == 0 {
                         let p = open.expect("'(' precedes");
                         if self.nodes[p].next == Some(qi) {
-                            return Err(fatal!("empty '()'."));
+                            return Err(PatternError::EmptyParentheses);
                         }
                         let inner = self.nodes[p].next.expect("not empty");
                         self.nodes[inner].prev = None;
@@ -199,7 +199,7 @@ impl Parser {
         }
 
         if level > 0 {
-            return Err(fatal!("too many '('."));
+            return Err(PatternError::TooManyOpening);
         }
         Ok(top)
     }
@@ -222,7 +222,7 @@ impl Parser {
             }
             let q = self.nodes[pi].next;
             if self.kind(q) != Some(Kind::Exp) {
-                return Err(fatal!("broken not."));
+                return Err(PatternError::BrokenNot);
             }
             let q = q.expect("checked");
             let not = self.push(Kind::Not);
@@ -278,7 +278,7 @@ impl Parser {
             }
             let (p, r) = (self.nodes[qi].prev, self.nodes[qi].next);
             if self.kind(p) != Some(Kind::Exp) || self.kind(r) != Some(Kind::Exp) {
-                return Err(fatal!("broken and/or."));
+                return Err(PatternError::BrokenAndOr);
             }
             let (p, r) = (p.expect("checked"), r.expect("checked"));
             let n = self.push(Kind::Exp);
