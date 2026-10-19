@@ -5,9 +5,15 @@
 //! - sort (`-d key`): `name:value` of the field.
 //! - pick (`-p pattern`): the name of a matched message, or its
 //!   record of scan with `-a`.
+//!
+//! With [`Flavor::Utf8`], the value of sort and the header searched by
+//! pick are decoded to UTF-8. The scan record is the same as mewl's
+//! since Mew decodes it.
 
+use crate::cli::Flavor;
 use crate::error::Result;
 use crate::header::{FieldSet, Header};
+use crate::mime;
 use crate::output::Output;
 use crate::pattern::Pattern;
 use crate::source::Message;
@@ -23,11 +29,13 @@ pub struct Printer {
     fields: FieldSet,
     body_len: i32,
     header: Header,
+    flavor: Flavor,
 }
 
 impl Printer {
-    pub fn new(mode: Mode, fields: FieldSet, body_len: i32, field_len: i32) -> Self {
-        Printer { mode, fields, body_len, header: Header::new(field_len) }
+    pub fn new(mode: Mode, fields: FieldSet, body_len: i32, field_len: i32, flavor: Flavor) -> Self {
+        let header = Header::new(field_len, flavor == Flavor::Utf8);
+        Printer { mode, fields, body_len, header, flavor }
     }
 
     /// Prints a message. `true` means that a scan record is printed,
@@ -42,7 +50,15 @@ impl Printer {
             Mode::Sort { key } => {
                 out.put(&msg.name);
                 match self.header.field_value(key) {
-                    Some(value) => out.put(b":").put(self.header.bytes(value)).put(b"\n"),
+                    Some(value) => {
+                        let value = self.header.bytes(value);
+                        out.put(b":");
+                        match self.flavor {
+                            Flavor::Mewl => out.put(value),
+                            Flavor::Utf8 => out.put(&mime::decode_header(value)),
+                        };
+                        out.put(b"\n")
+                    }
                     None => out.put(b": \n"),
                 };
                 Ok(false)

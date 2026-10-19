@@ -45,6 +45,22 @@ length = 5, folder = +inbox, range = 0, bodylen = 20
 field = Subject:,Date:,From:,To:,Cc:,Content-Type:,Content-Transfer-Encoding:,X-Mew-UIDL:,Message-ID:,In-Reply-To:,References:,X-Mew-Ref:
 ";
 
+/// What this program does depends on the name it is invoked as.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Flavor {
+    /// `mewl-rs` (and any other name): the same as mewl.
+    Mewl,
+    /// `mewl-rs-utf8`: MIME-encoded header values are decoded to UTF-8
+    /// for sort (`-d`) and pick (`-p`).
+    Utf8,
+}
+
+impl Flavor {
+    pub fn from_program_name(name: &[u8]) -> Self {
+        if name == b"mewl-rs-utf8" { Flavor::Utf8 } else { Flavor::Mewl }
+    }
+}
+
 pub enum Command {
     Help,
     Version,
