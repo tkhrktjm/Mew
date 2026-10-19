@@ -1,7 +1,8 @@
 [package]
 name = "mewl-rs"
 version = "6.11.0"
-edition = "2021"
+rust-version = "1.88"
+edition = "2024"
 description = "Message scanner for Mew 4 or later (Rust port of mewl)"
 license = "BSD-3-Clause"
 
