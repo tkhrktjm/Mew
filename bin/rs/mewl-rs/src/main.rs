@@ -78,7 +78,7 @@ fn main() -> ExitCode {
 fn run(opts: &Options, flavor: Flavor, reporter: &Reporter, out: &mut Output) -> Result<()> {
     let (ranges, is_default) = opts.folder_ranges()?;
     let fields = opts.field_set();
-    let mode = opts.mode()?;
+    let mode = opts.mode(flavor)?;
     let count = opts.fields.is_some() && !matches!(mode, printer::Mode::Pick { .. });
 
     /* With -w, a byte from stdin is awaited after each record. This

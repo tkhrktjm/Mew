@@ -70,6 +70,12 @@ impl Header {
                 Err(_) => break,
             }
         }
+        /* So that the last byte is not overwritten (see next_line()),
+        unless the buffer is full. */
+        if self.flavor.keeps_last_line() && len > 0 && self.buf[len - 1] != LF && len < self.buf.len() {
+            self.buf[len] = LF;
+            len += 1;
+        }
         self.len = len;
     }
 
@@ -210,8 +216,9 @@ impl Header {
                         p = next;
                     }
                     None => {
-                        /* The last line is not escaped. */
-                        body.push(BodyLine { range: q..self.len, dot_stuffed: false });
+                        /* mewl does not escape the last line. */
+                        let dot_stuffed = self.flavor.keeps_last_line() && self.buf[q..self.len].starts_with(b".");
+                        body.push(BodyLine { range: q..self.len, dot_stuffed });
                         break;
                     }
                 }
@@ -290,6 +297,26 @@ mod tests {
         let body: Vec<_> = s.body.iter().map(|l| (h.bytes(l.range.clone()).to_vec(), l.dot_stuffed)).collect();
         /* The last byte is overwritten with LF as mewl does. */
         assert_eq!(body, [(b".dot\n".to_vec(), true), (b"line\n".to_vec(), false), (b"las\n".to_vec(), false)]);
+    }
+
+    #[test]
+    fn last_line_kept() {
+        let data = b"Subject: abc\n\nline\n.";
+        let fields = FieldSet::parse(b"Subject:");
+        let mut compat = header(data, 5, Flavor::Compat);
+        let s = compat.summarize(&fields, 5);
+        let last = &s.body[1];
+        assert_eq!((compat.bytes(last.range.clone()), last.dot_stuffed), (&b"\n"[..], false));
+
+        let mut utf8 = header(data, 5, Flavor::Utf8);
+        let s = utf8.summarize(&fields, 5);
+        let last = &s.body[1];
+        assert_eq!((utf8.bytes(last.range.clone()), last.dot_stuffed), (&b".\n"[..], true));
+
+        let mut utf8 = header(b"Subject: abc", 5, Flavor::Utf8);
+        assert!(utf8.search(b"subject", b"abc", true));
+        let v = utf8.field_value(b"subject:").unwrap();
+        assert_eq!(utf8.bytes(v), b" abc\n");
     }
 
     #[test]

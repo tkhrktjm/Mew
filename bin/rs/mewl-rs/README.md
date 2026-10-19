@@ -40,6 +40,20 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   never matches a value beginning with a byte >= 0x80 ignoring case,
   so `subject=日本語` finds nothing there.
 
+It also fixes some bugs of `mewl`:
+
+- The last line of a message not ending with a newline is kept.
+  `mewl` overwrites its last byte with a newline, so `last` comes out
+  as `las`. Likewise, the last line of the body beginning with `.` is
+  escaped as the other lines are.
+- A pick pattern is parsed strictly. Words not quoted after a value
+  are a part of the value, so `subject=foo bar`, which Mew passes for
+  `subject='foo bar'`, finds `foo bar` while `mewl` finds `foo`. A
+  pattern which is not one expression, such as `a=b c=d`, `(a=b c)`,
+  or `abc`, is an error ("broken pattern."), while `mewl` silently
+  evaluates its first part. A word followed by `=` is the key of
+  another comparison, not a part of the value.
+
 Otherwise it is the same as `mewl-rs-compat`. The output of scan is
 the same as `mewl`'s since Mew decodes it. Tell Mew to use it:
 

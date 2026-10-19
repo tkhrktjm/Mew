@@ -9,7 +9,7 @@
 
 use super::{PatternError, Result};
 
-use super::lexer::{Lexer, Token};
+use super::lexer::{Lexer, Spanned, Token};
 use super::{Cmp, Expr};
 
 type Link = Option<usize>;
@@ -39,17 +39,32 @@ struct Node {
     value: Vec<u8>,
 }
 
-#[derive(Default)]
 struct Parser {
     nodes: Vec<Node>,
+    /// Refuse what mewl takes silently (see [`parse`]).
+    strict: bool,
 }
 
-pub fn parse(pattern: &[u8]) -> Result<Expr> {
-    let mut parser = Parser::default();
+/// Parses a pattern as mewl does, or more strictly:
+///
+/// - Words not quoted after a value are a part of the value, with the
+///   blanks between them as they are, unless a word is the key of a
+///   comparison. Mew passes `subject=foo bar` for `subject='foo bar'`,
+///   which mewl takes as `subject=foo`.
+/// - A pattern which is not one expression, such as `a=b c=d` or
+///   `(a=b c)`, is an error, of which mewl evaluates the first part
+///   only.
+pub fn parse(pattern: &[u8], strict: bool) -> Result<Expr> {
+    let mut tokens = Lexer::new(pattern).collect::<Result<Vec<_>>>()?;
+    if strict {
+        tokens = join_values(tokens, pattern);
+    }
+
+    let mut parser = Parser { nodes: Vec::new(), strict };
     let mut top = None;
     let mut last: Link = None;
-    for token in Lexer::new(pattern) {
-        let p = parser.push_token(token?);
+    for Spanned { token, .. } in tokens {
+        let p = parser.push_token(token);
         match last {
             None => top = Some(p),
             Some(q) => parser.link(q, p),
@@ -60,6 +75,35 @@ pub fn parse(pattern: &[u8]) -> Result<Expr> {
     parser.bind_comparisons(top)?;
     let top = parser.expression(top)?;
     Ok(parser.to_expr(Some(top)))
+}
+
+/// Joins words not quoted after the value of a comparison into it.
+fn join_values(tokens: Vec<Spanned>, pattern: &[u8]) -> Vec<Spanned> {
+    let token = |i: usize| tokens.get(i).map(|t| &t.token);
+    let is_str = |i: usize| matches!(token(i), Some(Token::Str(_)));
+    let is_cmp = |i: usize| matches!(token(i), Some(Token::Cmp(_)));
+
+    let mut out: Vec<Spanned> = Vec::with_capacity(tokens.len());
+    let mut i = 0;
+    while i < tokens.len() {
+        out.push(tokens[i].clone());
+        let is_value = is_str(i) && i > 0 && is_cmp(i - 1);
+        i += 1;
+        if !is_value {
+            continue;
+        }
+        /* A word followed by a comparison is its key. */
+        while is_str(i) && !is_cmp(i + 1) {
+            let value = out.last_mut().expect("pushed");
+            if let (Token::Str(v), Token::Str(w)) = (&mut value.token, &tokens[i].token) {
+                v.extend_from_slice(&pattern[value.span.end..tokens[i].span.start]);
+                v.extend_from_slice(w);
+            }
+            value.span.end = tokens[i].span.end;
+            i += 1;
+        }
+    }
+    out
 }
 
 impl Parser {
@@ -144,7 +188,11 @@ impl Parser {
         let top = self.parentheses(top)?;
         let top = self.negations(top)?;
         let top = self.binary(top, Kind::And)?;
-        self.binary(top, Kind::Or)
+        let top = self.binary(top, Kind::Or)?;
+        if self.strict && (self.nodes[top].kind != Kind::Exp || self.nodes[top].next.is_some()) {
+            return Err(PatternError::Broken);
+        }
+        Ok(top)
     }
 
     /*
