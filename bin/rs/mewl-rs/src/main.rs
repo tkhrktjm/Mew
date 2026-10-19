@@ -6,8 +6,8 @@
 //!
 //! Based on mewl.c, Copyright (C) 2000-2005 Mew developing team, BSD-3-Clause.
 //!
-//! Invoked as `mewl-rs-utf8`, MIME-encoded header values are decoded
-//! to UTF-8 for sort and pick (see [`cli::Flavor`]).
+//! Invoked as `mewl-rs-utf8`, it decodes MIME-encoded header values
+//! to UTF-8 more than mewl does (see [`cli::Flavor`]).
 //!
 //! ```text
 //! mewl-rs [options] [folder [range]]
