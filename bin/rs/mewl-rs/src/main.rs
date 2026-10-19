@@ -4,8 +4,8 @@
 //! for Mew. The input, the output, and the options are the same as
 //! mewl's; see mewl(1).
 //!
-//! Invoked as `mewl-rs-utf8`, MIME-encoded header values are decoded
-//! to UTF-8 for sort and pick (see [`cli::Flavor`]).
+//! Invoked as `mewl-rs-utf8`, it decodes MIME-encoded header values
+//! to UTF-8 more than mewl does (see [`cli::Flavor`]).
 //!
 //! ```text
 //! mewl-rs [options] [folder [range]]

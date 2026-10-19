@@ -16,11 +16,12 @@ impl Fixture {
         let _ = fs::remove_dir_all(&dir);
         let inbox = dir.join("Mail/inbox");
         fs::create_dir_all(&inbox).unwrap();
-        let messages: [&[u8]; 4] = [
+        let messages: [&[u8]; 5] = [
             b"Subject: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\nFrom: =?ISO-2022-JP?B?GyRCOzNFRBsoQg==?= <yamada@example.com>\n\nbody\n",
             b"Subject: =?ISO-2022-JP?B?GyRCRnxLXDhsGyhC?=\n =?ISO-2022-JP?B?GyRCJE5GfEtcGyhC?=\nFrom: foo@example.com\n\nbody\n",
-            b"Subject: plain English\nFrom: bar@example.com\n\n\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e in body\n",
+            b"From-Address: x\nSubject: plain English\nFrom: bar@example.com\n\n\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e in body\n",
             b"Subject: Re: =?Shift_JIS?B?k/qWe4zq?= (2)\n\nbody\n",
+            b"Subject: Re:=?Shift_JIS?B?k/qW?= =?Shift_JIS?B?e4zq?=\n\nbody\n",
         ];
         for (i, m) in messages.iter().enumerate() {
             fs::write(inbox.join((i + 1).to_string()), m).unwrap();
@@ -54,7 +55,7 @@ fn sort_decodes_values() {
     let f = Fixture::new("sort");
     assert_eq!(
         f.run("mewl-rs-utf8", &["-l", "0", "-d", "subject:", "+inbox"]),
-        "1: 日本語の件名\n2: 日本語の日本\n3: plain English\n4: Re: 日本語 (2)\n"
+        "1: 日本語の件名\n2: 日本語の日本\n3: plain English\n4: Re: 日本語 (2)\n5: Re:日本語\n"
     );
     assert_eq!(
         f.run("mewl-rs", &["-l", "0", "-d", "subject:", "+inbox", "1"]),
@@ -66,14 +67,38 @@ fn sort_decodes_values() {
 #[test]
 fn pick_searches_decoded_values() {
     let f = Fixture::new("pick");
-    assert_eq!(f.run("mewl-rs-utf8", &["-p", "subject=日本語", "+inbox"]), "1\n2\n4\n");
+    assert_eq!(f.run("mewl-rs-utf8", &["-p", "subject=日本語", "+inbox"]), "1\n2\n4\n5\n");
     assert_eq!(f.run("mewl-rs-utf8", &["-p", "subject==日本語の日本", "+inbox"]), "2\n");
     assert_eq!(f.run("mewl-rs-utf8", &["-p", "from=山田 | subject=english", "+inbox"]), "1\n3\n");
     assert_eq!(f.run("mewl-rs-utf8", &["-p", "head=件名", "+inbox"]), "1\n");
     /* Only the header is searched. */
     assert_eq!(f.run("mewl-rs-utf8", &["-p", "head=\"日本語 in body\"", "+inbox"]), "");
-    /* mewl finds nothing. */
-    assert_eq!(f.run("mewl-rs", &["-p", "subject=日本語", "+inbox"]), "");
+}
+
+#[test]
+fn mewl_decodes_fields_when_picking() {
+    let f = Fixture::new("mewl");
+    /* An encoded-word has to be a word by itself, and is converted by
+    itself. */
+    assert_eq!(f.run("mewl-rs", &["-p", "subject==日本語", "+inbox"]), "1\n2\n4\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "from==山田", "+inbox"]), "1\n");
+    /* but not the whole header. */
+    assert_eq!(f.run("mewl-rs", &["-p", "head==件名", "+inbox"]), "");
+    /* mewl on glibc never matches a value beginning with a byte >= 0x80
+    ignoring case. */
+    if cfg!(all(target_os = "linux", target_env = "gnu")) {
+        assert_eq!(f.run("mewl-rs", &["-p", "subject=日本語", "+inbox"]), "");
+    }
+}
+
+#[test]
+fn key_names_a_field() {
+    let f = Fixture::new("key");
+    /* "subj" is not "Subject:", and "from" is not "From-Address:". */
+    assert_eq!(f.run("mewl-rs", &["-p", "subj=plain", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=plain", "+inbox"]), "3\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject:=plain", "+inbox"]), "3\n");
+    assert_eq!(f.run("mewl-rs", &["-d", "from", "+inbox", "3"]), "3:: bar@example.com\n");
 }
 
 #[test]
