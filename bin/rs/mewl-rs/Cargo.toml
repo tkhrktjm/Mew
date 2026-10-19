@@ -1,0 +1,16 @@
+[package]
+name = "mewl-rs"
+version = "6.11.0"
+edition = "2021"
+description = "Message scanner for Mew 4 or later (Rust port of mewl)"
+license = "BSD-3-Clause"
+
+[[bin]]
+name = "mewl-rs"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
