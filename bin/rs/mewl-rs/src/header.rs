@@ -13,6 +13,7 @@ use std::io::{ErrorKind, Read};
 use std::ops::Range;
 
 use crate::compat::CHAR_IS_SIGNED;
+use crate::mime;
 
 /// 64k, now even 16k is not enough.
 pub const MAX_HEADER: usize = 65536;
@@ -85,14 +86,17 @@ pub struct Header {
     len: usize,
     /// The max number of lines of a field. 0 means no limit.
     field_len: i32,
+    /// Decode MIME-encoded values to UTF-8 when searching.
+    decode: bool,
 }
 
 impl Header {
-    pub fn new(field_len: i32) -> Self {
+    pub fn new(field_len: i32, decode: bool) -> Self {
         Header {
             buf: vec![0; MAX_HEADER].into_boxed_slice(),
             len: 0,
             field_len,
+            decode,
         }
     }
 
@@ -274,12 +278,21 @@ impl Header {
      *
      */
 
+    /// [`contains`] after decoding `text` if requested.
+    fn contains(&self, text: &[u8], value: &[u8], case_sensitive: bool) -> bool {
+        if self.decode {
+            contains(&mime::decode_header(text), value, case_sensitive, false)
+        } else {
+            contains(text, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES)
+        }
+    }
+
     /// Whether a field named `key` contains `value`. The key `head`
     /// means the whole header.
     pub fn search(&mut self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
         if key == WHOLE_HEADER {
             let header = self.c_str(0, self.end_of_header());
-            return contains(header, value, case_sensitive);
+            return self.contains(header, value, case_sensitive);
         }
 
         let mut p = 0;
@@ -293,7 +306,7 @@ impl Header {
                     (None, Some(n)) => Some(n - 1),
                     (None, None) => self.len.checked_sub(1),
                 };
-                if contains(self.c_str(p + key.len(), stop), value, case_sensitive) {
+                if self.contains(self.c_str(p + key.len(), stop), value, case_sensitive) {
                     return true;
                 }
             }
@@ -314,15 +327,16 @@ impl Header {
 const HIGH_FIRST_BYTE_NEVER_MATCHES: bool =
     cfg!(all(target_os = "linux", target_env = "gnu")) && CHAR_IS_SIGNED;
 
-/// `strstr()` or `strcasestr()` in the C locale.
-fn contains(haystack: &[u8], needle: &[u8], case_sensitive: bool) -> bool {
+/// `strstr()` or `strcasestr()` in the C locale. `high_never_matches`
+/// emulates glibc (see above).
+fn contains(haystack: &[u8], needle: &[u8], case_sensitive: bool, high_never_matches: bool) -> bool {
     let Some(&first) = needle.first() else {
         return true;
     };
     let mut windows = haystack.windows(needle.len());
     if case_sensitive {
         windows.any(|w| w == needle)
-    } else if HIGH_FIRST_BYTE_NEVER_MATCHES && first >= 0x80 {
+    } else if high_never_matches && first >= 0x80 {
         false
     } else {
         windows.any(|w| w.eq_ignore_ascii_case(needle))
@@ -334,7 +348,7 @@ mod tests {
     use super::*;
 
     fn header(mut data: &[u8], field_len: i32) -> Header {
-        let mut h = Header::new(field_len);
+        let mut h = Header::new(field_len, false);
         h.load(&mut data);
         h
     }

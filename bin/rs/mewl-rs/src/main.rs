@@ -6,6 +6,9 @@
 //!
 //! Based on mewl.c, Copyright (C) 2000-2005 Mew developing team, BSD-3-Clause.
 //!
+//! Invoked as `mewl-rs-utf8`, MIME-encoded header values are decoded
+//! to UTF-8 for sort and pick (see [`cli::Flavor`]).
+//!
 //! ```text
 //! mewl-rs [options] [folder [range]]
 //! ```
@@ -15,6 +18,7 @@ mod compat;
 mod error;
 mod folder;
 mod header;
+mod mime;
 mod output;
 mod pattern;
 mod printer;
@@ -28,7 +32,7 @@ use std::os::fd::AsFd;
 use std::os::unix::ffi::OsStringExt;
 use std::process::ExitCode;
 
-use cli::{Command, Options};
+use cli::{Command, Flavor, Options};
 use error::{Error, Result};
 use header::FieldSet;
 use output::Output;
@@ -42,6 +46,7 @@ fn main() -> ExitCode {
     let argv: Vec<Vec<u8>> = env::args_os().map(OsStringExt::into_vec).collect();
     let progname = cli::program_name(argv.first().map_or(&[][..], Vec::as_slice));
     error::set_program_name(&progname);
+    let flavor = Flavor::from_program_name(&progname);
 
     let mut out = Output::new();
     let result = cli::parse(&argv).and_then(|command| match command {
@@ -53,7 +58,7 @@ fn main() -> ExitCode {
             cli::version(&progname);
             Ok(())
         }
-        Command::Run(opts) => run(*opts, &mut out),
+        Command::Run(opts) => run(*opts, flavor, &mut out),
     });
     out.flush();
 
@@ -70,7 +75,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(opts: Options, out: &mut Output) -> Result<()> {
+fn run(opts: Options, flavor: Flavor, out: &mut Output) -> Result<()> {
     let (ranges, is_default) = opts.folder_ranges()?;
     let fields = FieldSet::parse(opts.fields.as_deref().unwrap_or(FieldSet::DEFAULT));
 
@@ -100,7 +105,7 @@ fn run(opts: Options, out: &mut Output) -> Result<()> {
         Source::Folders(FolderScanner::new(ranges, home, suffix, is_default, print_count))
     };
 
-    let mut printer = Printer::new(mode, fields, opts.body_len, opts.field_len);
+    let mut printer = Printer::new(mode, fields, opts.body_len, opts.field_len, flavor);
     let mut mode = 0;
     while let Some(mut msg) = source.next_message(out)? {
         if opts.use_fstat && !msg.is_regular(&mut mode) {
