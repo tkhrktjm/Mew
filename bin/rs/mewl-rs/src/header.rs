@@ -12,6 +12,7 @@
 use std::io::{ErrorKind, Read};
 use std::ops::Range;
 
+use crate::cli::Flavor;
 use crate::compat::CHAR_IS_SIGNED;
 use crate::mime;
 
@@ -86,17 +87,17 @@ pub struct Header {
     len: usize,
     /// The max number of lines of a field. 0 means no limit.
     field_len: i32,
-    /// Decode MIME-encoded values to UTF-8 when searching.
-    decode: bool,
+    /// How pick decodes values (see [`Header::search`]).
+    flavor: Flavor,
 }
 
 impl Header {
-    pub fn new(field_len: i32, decode: bool) -> Self {
+    pub fn new(field_len: i32, flavor: Flavor) -> Self {
         Header {
             buf: vec![0; MAX_HEADER].into_boxed_slice(),
             len: 0,
             field_len,
-            decode,
+            flavor,
         }
     }
 
@@ -125,6 +126,17 @@ impl Header {
         self.buf
             .get(pos..pos + name.len())
             .is_some_and(|s| s.eq_ignore_ascii_case(name))
+    }
+
+    /// Whether the field at `p` is named `key` (`field_is()` of mewl).
+    /// The name has to end at `:`, so that `to` does not match
+    /// `Token:`. `key` may spell the `:` out itself.
+    fn is_field(&self, p: usize, key: &[u8]) -> bool {
+        let len = key.len();
+        if len == 0 || p >= self.len || len >= self.len - p {
+            return false;
+        }
+        self.buf[p..p + len].eq_ignore_ascii_case(key) && (key[len - 1] == b':' || self.buf[p + len] == b':')
     }
 
     /// The beginning of the line after `p`. `None` if the data or,
@@ -258,7 +270,7 @@ impl Header {
     pub fn field_value(&mut self, key: &[u8]) -> Option<Range<usize>> {
         let mut p = 0;
         loop {
-            let matched = self.has_name_at(p, key);
+            let matched = self.is_field(p, key);
             let end = self.next_field(p, true);
             if matched {
                 let stop = match (end.truncated, end.next) {
@@ -278,26 +290,25 @@ impl Header {
      *
      */
 
-    /// [`contains`] after decoding `text` if requested.
-    fn contains(&self, text: &[u8], value: &[u8], case_sensitive: bool) -> bool {
-        if self.decode {
-            contains(&mime::decode_header(text), value, case_sensitive, false)
-        } else {
-            contains(text, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES)
-        }
-    }
-
     /// Whether a field named `key` contains `value`. The key `head`
     /// means the whole header.
+    ///
+    /// As mewl, encoded-words in a field body are decoded to UTF-8, and
+    /// the whole header is compared as it is. With [`Flavor::Utf8`],
+    /// the whole header is decoded, too, raw ISO-2022-JP is converted,
+    /// and a value in UTF-8 matches ignoring case (see [`contains`]).
     pub fn search(&mut self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
         if key == WHOLE_HEADER {
             let header = self.c_str(0, self.end_of_header());
-            return self.contains(header, value, case_sensitive);
+            return match self.flavor {
+                Flavor::Mewl => contains(header, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES),
+                Flavor::Utf8 => contains(&decode_header(header), value, case_sensitive, false),
+            };
         }
 
         let mut p = 0;
         loop {
-            let matched = self.has_name_at(p, key);
+            let matched = self.is_field(p, key);
             let end = self.next_field(p, true);
             if matched {
                 /* Excluding the last LF. */
@@ -306,7 +317,7 @@ impl Header {
                     (None, Some(n)) => Some(n - 1),
                     (None, None) => self.len.checked_sub(1),
                 };
-                if self.contains(self.c_str(p + key.len(), stop), value, case_sensitive) {
+                if self.field_contains(self.c_str(p + key.len(), stop), value, case_sensitive) {
                     return true;
                 }
             }
@@ -316,6 +327,48 @@ impl Header {
             }
         }
     }
+
+    /// Whether `body`, which follows the key, contains `value`.
+    fn field_contains(&self, body: &[u8], value: &[u8], case_sensitive: bool) -> bool {
+        /* The field body begins after ":" if the key lacks it. */
+        let after_colon = || body.strip_prefix(b":").unwrap_or(body);
+        match self.flavor {
+            Flavor::Mewl if body.windows(2).any(|w| w == b"=?") => {
+                contains(&mime::decode_field(after_colon()), value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES)
+            }
+            Flavor::Mewl => contains(body, value, case_sensitive, HIGH_FIRST_BYTE_NEVER_MATCHES),
+            Flavor::Utf8 => contains(&mime::decode_text(after_colon()), value, case_sensitive, false),
+        }
+    }
+}
+
+/// Decodes each field of a header, keeping the line between fields.
+fn decode_header(header: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(header.len());
+    let mut beg = 0;
+    while beg < header.len() {
+        /* A field ends at a line break not followed by white space. */
+        let mut end = beg;
+        loop {
+            match header[end..].iter().position(|&c| c == b'\n') {
+                Some(i) if matches!(header.get(end + i + 1), Some(b' ' | b'\t')) => end += i + 1,
+                Some(i) => {
+                    end += i;
+                    break;
+                }
+                None => {
+                    end = header.len();
+                    break;
+                }
+            }
+        }
+        out.extend(mime::decode_text(&header[beg..end]));
+        if end < header.len() {
+            out.push(b'\n');
+        }
+        beg = end + 1;
+    }
+    out
 }
 
 /*
@@ -348,7 +401,7 @@ mod tests {
     use super::*;
 
     fn header(mut data: &[u8], field_len: i32) -> Header {
-        let mut h = Header::new(field_len, false);
+        let mut h = Header::new(field_len, Flavor::Mewl);
         h.load(&mut data);
         h
     }

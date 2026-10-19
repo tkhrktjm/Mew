@@ -6,9 +6,8 @@
 //! - pick (`-p pattern`): the name of a matched message, or its
 //!   record of scan with `-a`.
 //!
-//! With [`Flavor::Utf8`], the value of sort and the header searched by
-//! pick are decoded to UTF-8. The scan record is the same as mewl's
-//! since Mew decodes it.
+//! With [`Flavor::Utf8`], the value of sort is decoded to UTF-8. The
+//! scan record is the same as mewl's since Mew decodes it.
 
 use crate::cli::Flavor;
 use crate::error::Result;
@@ -34,7 +33,7 @@ pub struct Printer {
 
 impl Printer {
     pub fn new(mode: Mode, fields: FieldSet, body_len: i32, field_len: i32, flavor: Flavor) -> Self {
-        let header = Header::new(field_len, flavor == Flavor::Utf8);
+        let header = Header::new(field_len, flavor);
         Printer { mode, fields, body_len, header, flavor }
     }
 
@@ -55,7 +54,7 @@ impl Printer {
                         out.put(b":");
                         match self.flavor {
                             Flavor::Mewl => out.put(value),
-                            Flavor::Utf8 => out.put(&mime::decode_header(value)),
+                            Flavor::Utf8 => out.put(&mime::decode_text(value)),
                         };
                         out.put(b"\n")
                     }

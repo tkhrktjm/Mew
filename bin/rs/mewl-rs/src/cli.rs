@@ -48,10 +48,13 @@ field = Subject:,Date:,From:,To:,Cc:,Content-Type:,Content-Transfer-Encoding:,X-
 /// What this program does depends on the name it is invoked as.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Flavor {
-    /// `mewl-rs` (and any other name): the same as mewl.
+    /// `mewl-rs` (and any other name): the same as mewl, which decodes
+    /// encoded-words in a field body searched by pick.
     Mewl,
-    /// `mewl-rs-utf8`: MIME-encoded header values are decoded to UTF-8
-    /// for sort (`-d`) and pick (`-p`).
+    /// `mewl-rs-utf8`: in addition, the value printed by sort (`-d`)
+    /// and the whole header searched by pick (`head`) are decoded, raw
+    /// ISO-2022-JP is converted, and a value in UTF-8 matches ignoring
+    /// case on glibc, too.
     Utf8,
 }
 
