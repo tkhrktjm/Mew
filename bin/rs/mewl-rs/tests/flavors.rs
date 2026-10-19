@@ -56,6 +56,19 @@ impl Fixture {
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8(out.stdout).unwrap()
     }
+
+    /// Runs `link/prog` with `args` as they are: (success, stdout, stderr).
+    fn run_raw(&self, prog: &str, args: &[&str]) -> (bool, String, String) {
+        let out = Command::new(self.dir.join("link").join(prog)).args(args).output().unwrap();
+        let text = |b: Vec<u8>| String::from_utf8_lossy(&b).into_owned();
+        (out.status.success(), text(out.stdout), text(out.stderr))
+    }
+
+    fn write(&self, path: &str, data: &[u8]) {
+        let path = self.dir.join("Mail").join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, data).unwrap();
+    }
 }
 
 impl Drop for Fixture {
@@ -180,4 +193,79 @@ fn broken_patterns_refused() {
             None => assert_eq!((String::from_utf8_lossy(&out.stdout).as_ref(), out.status.success()), ("3\n", true)),
         }
     }
+}
+
+#[test]
+fn no_data_left_by_the_previous_message() {
+    let f = Fixture::new("stale");
+    f.write("b/1", b"Subject: stale-data\n\n");
+    f.write("b/2", b"");
+    f.write("b/3", b"Subj");
+    /* head= of an empty message */
+    assert_eq!(f.run("mewl-rs", &["-p", "head=stale", "+b"]), "1\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "head=stale", "+b"]), "1\n2\n");
+    /* a field name completed by what is left */
+    assert!(f.run("mewl-rs", &["-f", "Subject:", "+b", "1-3"]).ends_with("Filename: 3\n\n.\n"));
+    assert!(f.run("mewl-rs-compat", &["-f", "Subject:", "+b", "1-3"]).ends_with("Filename: 3\nSub\n\n.\n"));
+}
+
+#[test]
+fn empty_header() {
+    let f = Fixture::new("empty");
+    f.write("b/1", b"\nSubject: in body\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "head=\"in body\"", "+b"]), "");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "head=\"in body\"", "+b"]), "1\n");
+    /* No field, and the body. mewl takes the body for the header. */
+    assert!(f.run("mewl-rs", &["+b"]).contains("Filename: 1\n\nSubject: in body\n.\n"));
+    assert!(f.run("mewl-rs-compat", &["+b"]).contains("Filename: 1\nSubject: in body\n\n.\n"));
+}
+
+#[test]
+fn nul_in_a_list() {
+    let f = Fixture::new("nul");
+    fs::write(f.dir.join("list"), b"1\0junk\n3\n1\n").unwrap();
+    let list = f.dir.join("list");
+    let args = ["-d", "subject:", "-i", list.to_str().unwrap(), "+inbox"];
+    assert_eq!(f.run("mewl-rs", &args), "1: 日本語の件名\n3: plain English\n1: 日本語の件名\n");
+    assert_eq!(f.run("mewl-rs-compat", &args), "1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n");
+}
+
+#[test]
+fn sort_key_without_colon() {
+    let f = Fixture::new("colon");
+    assert_eq!(f.run("mewl-rs", &["-d", "from", "+inbox", "3"]), "3: bar@example.com\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-d", "from", "+inbox", "3"]), "3:: bar@example.com\n");
+}
+
+#[test]
+fn numbers() {
+    let f = Fixture::new("numbers");
+    let mail = f.dir.join("Mail");
+    let b = ["-b", mail.to_str().unwrap()];
+    for (args, error) in [
+        (&["-c", "-1", "+inbox"][..], "mewl-rs: invalid number '-1'.\n"),
+        (&["-l", "x", "+inbox"], "mewl-rs: invalid number 'x'.\n"),
+        (&["+inbox", "last:-3"], "mewl-rs: invalid range 'last:-3'.\n"),
+        (&["-s", "+inbox 1-x"], "mewl-rs: invalid range '1-x'.\n"),
+    ] {
+        let args: Vec<_> = b.iter().chain(args).copied().collect();
+        assert_eq!(f.run_raw("mewl-rs", &args), (false, String::new(), error.to_string()));
+        assert!(f.run_raw("mewl-rs-compat", &args).0);
+    }
+    assert_eq!(f.run("mewl-rs", &["-d", "subject:", "+inbox", "-3"]), f.run("mewl-rs", &["-d", "subject:", "+inbox", "1-3"]));
+
+    /* A number too large is not a message, while mewl counts it. */
+    f.write("c/1", b"Subject: one\n\n");
+    f.write("c/99999999999", b"Subject: large\n\n");
+    assert!(f.run("mewl-rs", &["-f", "Subject:", "+c"]).starts_with("NumOfMsg: 1\n"));
+    assert!(f.run("mewl-rs-compat", &["-f", "Subject:", "+c"]).starts_with("NumOfMsg: 2\n"));
+}
+
+#[test]
+fn options() {
+    let f = Fixture::new("options");
+    assert_eq!(f.run_raw("mewl-rs", &["-:"]), (false, String::new(), "mewl-rs: unknown option '-:'.\n".to_string()));
+    assert_eq!(f.run_raw("mewl-rs-compat", &["-:"]).2, "Usage: mewl-rs-compat [options] [folder [range]]\n");
+    assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n -x  <suffix>  Use this suffix.\n"));
+    assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n -x            Use this suffix.\n"));
 }

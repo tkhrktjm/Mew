@@ -4,4 +4,4 @@ mod navigator;
 mod range;
 
 pub use navigator::{Entered, Navigator};
-pub use range::FolderRange;
+pub use range::{FolderRange, parse_number};

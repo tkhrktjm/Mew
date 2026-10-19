@@ -118,7 +118,14 @@ impl ListReader {
         }
         /* A line is a C string: it ends at NUL or LF. */
         let line_end = chunk.iter().position(|&c| c == b'\n' || c == 0);
-        if line_end.is_none_or(|i| chunk[i] == 0) {
+        let rest_left = if self.settings.flavor.fixes_bugs() {
+            !chunk.ends_with(b"\n") && chunk.len() == limit
+        } else {
+            /* mewl looks for LF only before NUL, so a line with NUL
+            makes it discard the next line. */
+            line_end.is_none_or(|i| chunk[i] == 0)
+        };
+        if rest_left {
             /* No LF seen: discard the rest of the line. */
             let _ = self.input.skip_until(b'\n');
         }

@@ -72,7 +72,7 @@ impl Header {
         }
         /* So that the last byte is not overwritten (see next_line()),
         unless the buffer is full. */
-        if self.flavor.keeps_last_line() && len > 0 && self.buf[len - 1] != LF && len < self.buf.len() {
+        if self.flavor.fixes_bugs() && len > 0 && self.buf[len - 1] != LF && len < self.buf.len() {
             self.buf[len] = LF;
             len += 1;
         }
@@ -84,10 +84,21 @@ impl Header {
         self.buf.get(range).unwrap_or_default()
     }
 
-    /// `strncasecmp(name, &buf[pos], strlen(name)) == 0`, which may
-    /// look beyond the data.
+    /// What may be read. mewl reads beyond the data into what the
+    /// previous message left in the buffer.
+    fn readable(&self) -> &[u8] {
+        if self.flavor.fixes_bugs() { &self.buf[..self.len] } else { &self.buf }
+    }
+
+    /// Whether the header is empty, the message beginning with an
+    /// empty line. mewl takes the body for the header then.
+    fn has_empty_header(&self) -> bool {
+        self.flavor.fixes_bugs() && self.len > 0 && self.buf[0] == LF
+    }
+
+    /// `strncasecmp(name, &buf[pos], strlen(name)) == 0`.
     fn has_name_at(&self, pos: usize, name: &[u8]) -> bool {
-        self.buf
+        self.readable()
             .get(pos..pos + name.len())
             .is_some_and(|s| s.eq_ignore_ascii_case(name))
     }
@@ -144,6 +155,9 @@ impl Header {
     /// The position of the empty line ending the header, or of the
     /// last byte. `None` if there is no data.
     fn end_of_header(&self) -> Option<usize> {
+        if self.has_empty_header() {
+            return Some(0);
+        }
         let data = &self.buf[..self.len];
         match data.windows(2).position(|w| w == b"\n\n") {
             Some(i) => Some(i + 1),
@@ -152,13 +166,15 @@ impl Header {
     }
 
     /// The C string beginning at `beg` when NUL is put at `nul` for a
-    /// while. Without `nul` after `beg`, it may extend beyond the data.
+    /// while. Without `nul` after `beg`, it may extend beyond the data
+    /// (see [`Header::readable`]).
     fn c_str(&self, beg: usize, nul: Option<usize>) -> &[u8] {
+        let readable = self.readable();
         let end = match nul {
-            Some(nul) if nul >= beg => nul,
-            _ => self.buf.len(),
+            Some(nul) if nul >= beg => nul.min(readable.len()),
+            _ => readable.len(),
         };
-        let s = self.buf.get(beg..end).unwrap_or_default();
+        let s = readable.get(beg..end).unwrap_or_default();
         s.split(|&c| c == 0).next().unwrap_or_default()
     }
 
@@ -175,10 +191,10 @@ impl Header {
     /// lines of the body.
     pub fn summarize(&mut self, fields: &FieldSet, body_len: i32) -> Summary {
         let mut found: Vec<Option<Range<usize>>> = vec![None; fields.names().len()];
-        let mut body_beg = None;
+        let mut body_beg = self.has_empty_header().then_some(1);
         let mut p = 0;
 
-        loop {
+        while body_beg.is_none() {
             let matched = fields.names().iter().position(|n| self.has_name_at(p, n));
             let end = self.next_field(p, false);
             if let Some(i) = matched {
@@ -217,7 +233,7 @@ impl Header {
                     }
                     None => {
                         /* mewl does not escape the last line. */
-                        let dot_stuffed = self.flavor.keeps_last_line() && self.buf[q..self.len].starts_with(b".");
+                        let dot_stuffed = self.flavor.fixes_bugs() && self.buf[q..self.len].starts_with(b".");
                         body.push(BodyLine { range: q..self.len, dot_stuffed });
                         break;
                     }
@@ -242,7 +258,9 @@ impl Header {
                     /* Including the last byte, which is LF now. */
                     (None, None) => self.len,
                 };
-                return Some(p + key.len()..stop);
+                /* mewl begins the value with ":" if the key lacks it. */
+                let colon = usize::from(self.flavor.fixes_bugs() && !key.ends_with(b":"));
+                return Some(p + key.len() + colon..stop);
             }
             p = end.next?;
         }

@@ -9,7 +9,7 @@ use std::io::{self, Write};
 
 use crate::compat::atoi;
 use crate::error::{Error, Result};
-use crate::folder::{FolderRange, Navigator};
+use crate::folder::{FolderRange, Navigator, parse_number};
 use crate::header::FieldSet;
 use crate::flavor::Flavor;
 use crate::printer::Mode;
@@ -21,7 +21,8 @@ const OPTSTRING: &[u8] = b"ab:c:d:e:f:hi:l:m:np:s:vwx:";
 
 const MAX_FOLDER: usize = 16;
 
-/* Some lines end with a space as mewl does. */
+/* Some lines end with a space as mewl does. mewl lacks "<suffix>"
+in the line of -x (see help()). */
 const HELP: &str = " -a            Print all necessary fields when picking.
  -b  <mdir>    Mail home.
  -c  <bodylen> Max body length to dump.
@@ -37,7 +38,7 @@ const HELP: &str = " -a            Print all necessary fields when picking.
  -s  <src>     Message source: '+folder range'.
  -w            Wait for stdio input to synchronize.
  -v            Display the version.
- -x            Use this suffix.
+ -x  <suffix>  Use this suffix.
 
 <range> = N | [start]-[end] | last:N
 <pattern> = 'key=val' | 'key!=val' | '!<pattern>' | '(<pattern>)'\x20
@@ -86,6 +87,8 @@ pub struct Options {
     pub suffix: Vec<u8>,
     /// `[folder [range]]`
     pub operands: Vec<Vec<u8>>,
+    /// How options are read and what is done.
+    pub flavor: Flavor,
 }
 
 impl Default for Options {
@@ -106,6 +109,7 @@ impl Default for Options {
             wait: false,
             suffix: b".mew".to_vec(),
             operands: Vec::new(),
+            flavor: Flavor::Compat,
         }
     }
 }
@@ -121,17 +125,37 @@ impl Options {
             return Ok((self.sources.clone(), false));
         }
         match self.operands.as_slice() {
-            [] => Ok((vec![FolderRange::parse(None, None)], true)),
-            [folder] => Ok((vec![FolderRange::parse(Some(folder), None)], false)),
-            [folder, range] => Ok((vec![FolderRange::parse(Some(folder), Some(range))], false)),
+            [] => Ok((vec![self.folder_range(None, None)?], true)),
+            [folder] => Ok((vec![self.folder_range(Some(folder), None)?], false)),
+            [folder, range] => Ok((vec![self.folder_range(Some(folder), Some(range))?], false)),
             _ => Err(Error::Usage),
         }
     }
 
+    /// mewl reads a number in a range by `atoi()`, so that garbage is
+    /// 0 and a negative number wraps around. `mewl-rs` refuses them.
+    fn folder_range(&self, folder: Option<&[u8]>, range: Option<&[u8]>) -> Result<FolderRange> {
+        if self.flavor.fixes_bugs() {
+            FolderRange::parse_strict(folder, range)
+        } else {
+            Ok(FolderRange::parse(folder, range))
+        }
+    }
+
+    /// The argument of `-c` or `-l`, likewise.
+    fn count(&self, arg: &[u8]) -> Result<i32> {
+        if !self.flavor.fixes_bugs() {
+            return Ok(atoi(arg));
+        }
+        parse_number(arg)
+            .and_then(|n| i32::try_from(n).ok())
+            .ok_or_else(|| Error::InvalidNumber(arg.to_vec()))
+    }
+
     /// What is printed: pick (`-p`), sort (`-d`), or scan.
-    pub fn mode(&self, flavor: Flavor) -> Result<Mode> {
+    pub fn mode(&self) -> Result<Mode> {
         Ok(match (&self.pattern, &self.sort_key) {
-            (Some(pattern), _) => Mode::Pick { pattern: flavor.parse_pattern(pattern)?, all_fields: self.all_fields },
+            (Some(pattern), _) => Mode::Pick { pattern: self.flavor.parse_pattern(pattern)?, all_fields: self.all_fields },
             (None, Some(key)) => Mode::Sort { key: key.clone() },
             (None, None) => Mode::Scan,
         })
@@ -147,12 +171,13 @@ impl Options {
             navigator: Navigator::new(self.mail_home.clone()),
             suffix: self.suffix.clone(),
             is_default,
+            flavor: self.flavor,
         }
     }
 }
 
-pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
-    let mut opts = Options::default();
+pub fn parse(argv: &[Vec<u8>], flavor: Flavor) -> Result<Command> {
+    let mut opts = Options { flavor, ..Options::default() };
     let mut args = argv.iter().skip(1).peekable();
 
     while let Some(arg) = args.next_if(|a| a.len() >= 2 && a[0] == b'-') {
@@ -160,7 +185,10 @@ pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
         if !rest.is_empty() {
             return Err(Error::UnknownLongOption(arg.clone()));
         }
-        let Some(pos) = OPTSTRING.iter().position(|&o| o == c) else {
+        /* mewl takes ':' in OPTSTRING for an option, and then shows
+        the usage. */
+        let pos = OPTSTRING.iter().position(|&o| o == c);
+        let Some(pos) = pos.filter(|_| !(c == b':' && flavor.fixes_bugs())) else {
             return Err(Error::UnknownOption(c));
         };
         let optarg = if OPTSTRING.get(pos + 1) == Some(&b':') {
@@ -175,13 +203,13 @@ pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
         match c {
             b'a' => opts.all_fields = true,
             b'b' => opts.mail_home = optarg,
-            b'c' => opts.body_len = atoi(&optarg),
+            b'c' => opts.body_len = opts.count(&optarg)?,
             b'd' => opts.sort_key = Some(optarg),
             b'e' => opts.exec_command = Some(optarg),
             b'f' => opts.fields = Some(optarg),
             b'h' => return Ok(Command::Help),
             b'i' => opts.input_file = Some(optarg),
-            b'l' => opts.field_len = atoi(&optarg),
+            b'l' => opts.field_len = opts.count(&optarg)?,
             b'm' => opts.exec_args = Some(optarg),
             b'n' => opts.use_fstat = false,
             b'p' => opts.pattern = Some(optarg),
@@ -189,7 +217,8 @@ pub fn parse(argv: &[Vec<u8>]) -> Result<Command> {
                 if opts.sources.len() >= MAX_FOLDER {
                     return Err(Error::TooManyFolders);
                 }
-                opts.sources.push(FolderRange::parse(Some(&optarg), None));
+                let range = opts.folder_range(Some(&optarg), None)?;
+                opts.sources.push(range);
             }
             b'v' => return Ok(Command::Version),
             b'w' => opts.wait = true,
@@ -214,11 +243,15 @@ pub fn usage(progname: &[u8]) {
     let _ = io::stderr().write_all(&line);
 }
 
-pub fn help(progname: &[u8]) {
+pub fn help(progname: &[u8], flavor: Flavor) {
     let head = [b"Help: ", progname, b"\n\n Message scanner.\n\n"].concat();
     let _ = io::stderr().write_all(&head);
     usage(progname);
-    let _ = io::stderr().write_all(HELP.as_bytes());
+    let help = match flavor.fixes_bugs() {
+        true => HELP.to_string(),
+        false => HELP.replace(" -x  <suffix>  ", " -x            "),
+    };
+    let _ = io::stderr().write_all(help.as_bytes());
 }
 
 pub fn version(progname: &[u8]) {
