@@ -10,7 +10,53 @@
 mod lexer;
 mod parser;
 
-use crate::error::{Result, fatal};
+use std::fmt;
+
+
+/// Errors of a pattern, with the messages of mewl.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatternError {
+    UngetcImpossible,
+    BrokenEscape,
+    BrokenQuotedString,
+    BrokenComparison,
+    Empty,
+    TooManyClosing,
+    EmptyParentheses,
+    TooManyOpening,
+    BrokenNot,
+    BrokenAndOr,
+    /// Found only when evaluated.
+    BrokenTree,
+}
+
+impl PatternError {
+    pub fn message(self) -> &'static str {
+        match self {
+            PatternError::UngetcImpossible => "ungetc is impossible.",
+            PatternError::BrokenEscape => "broken escape.",
+            PatternError::BrokenQuotedString => "broken quoted string.",
+            PatternError::BrokenComparison => "broken eq/neq.",
+            PatternError::Empty => "invalid pattern.",
+            PatternError::TooManyClosing => "too many ')'.",
+            PatternError::EmptyParentheses => "empty '()'.",
+            PatternError::TooManyOpening => "too many '('.",
+            PatternError::BrokenNot => "broken not.",
+            PatternError::BrokenAndOr => "broken and/or.",
+            PatternError::BrokenTree => "broken tree.",
+        }
+    }
+}
+
+impl fmt::Display for PatternError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
+impl std::error::Error for PatternError {}
+
+type Result<T> = std::result::Result<T, PatternError>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmp {
@@ -73,7 +119,7 @@ impl Expr {
             Expr::And(a, b) => a.eval(search)? && b.eval(search)?,
             Expr::Or(a, b) => a.eval(search)? || b.eval(search)?,
             Expr::Cmp { cmp, key, value } => search(key, value, cmp.case_sensitive()) != cmp.negated(),
-            Expr::Broken => return Err(fatal!("broken tree.")),
+            Expr::Broken => return Err(PatternError::BrokenTree),
         })
     }
 }
@@ -81,17 +127,11 @@ impl Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
 
     /// Evaluates `pattern` where a field `k` contains `v` if `v` is
     /// in `k` (e.g. the field `abc` contains `b`).
-    fn eval(pattern: &[u8]) -> std::result::Result<bool, Vec<u8>> {
-        let msg = |e| match e {
-            Error::Fatal(m) => m,
-            Error::Usage => b"usage".to_vec(),
-        };
-        let p = Pattern::parse(pattern).map_err(msg)?;
-        p.matches(&mut |k, v, _| k.windows(v.len()).any(|w| w == v)).map_err(msg)
+    fn eval(pattern: &[u8]) -> Result<bool> {
+        Pattern::parse(pattern)?.matches(&mut |k, v, _| k.windows(v.len()).any(|w| w == v))
     }
 
     #[test]
@@ -105,14 +145,14 @@ mod tests {
 
     #[test]
     fn errors() {
-        assert_eq!(eval(b""), Err(b"invalid pattern.".to_vec()));
-        assert_eq!(eval(b"a="), Err(b"broken eq/neq.".to_vec()));
-        assert_eq!(eval(b"(a=b"), Err(b"too many '('.".to_vec()));
-        assert_eq!(eval(b"a=b)"), Err(b"too many ')'.".to_vec()));
-        assert_eq!(eval(b"()"), Err(b"empty '()'.".to_vec()));
-        assert_eq!(eval(b"!a"), Err(b"broken not.".to_vec()));
-        assert_eq!(eval(b"a=b &"), Err(b"broken and/or.".to_vec()));
-        assert_eq!(eval(b"abc"), Err(b"broken tree.".to_vec()));
+        assert_eq!(eval(b""), Err(PatternError::Empty));
+        assert_eq!(eval(b"a="), Err(PatternError::BrokenComparison));
+        assert_eq!(eval(b"(a=b"), Err(PatternError::TooManyOpening));
+        assert_eq!(eval(b"a=b)"), Err(PatternError::TooManyClosing));
+        assert_eq!(eval(b"()"), Err(PatternError::EmptyParentheses));
+        assert_eq!(eval(b"!a"), Err(PatternError::BrokenNot));
+        assert_eq!(eval(b"a=b &"), Err(PatternError::BrokenAndOr));
+        assert_eq!(eval(b"abc"), Err(PatternError::BrokenTree));
         /* Only the first one is evaluated. */
         assert_eq!(eval(b"abc=a abc"), Ok(true));
     }

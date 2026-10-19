@@ -12,7 +12,8 @@
 //! differently, e.g. 0x8160 of Shift_JIS is U+301C by glibc but U+FF5E
 //! here.
 //!
-//! [`decode_text`] is for mewl-rs-utf8 and more lenient:
+//! [`decode_text`] is for `mewl-rs` (not `mewl-rs-compat`) and more
+//! lenient:
 //!
 //! - An encoded-word is found anywhere, e.g. in `Re:=?UTF-8?B?...?=`.
 //! - Adjacent encoded-words in the same charset are converted together
@@ -72,6 +73,27 @@ pub fn decode_text(s: &[u8]) -> Vec<u8> {
     } else {
         decode_anywhere(s)
     }
+}
+
+/// Decodes each field of a header with [`decode_text`], keeping the
+/// line break between fields.
+pub fn decode_header(header: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(header.len());
+    let mut beg = 0;
+    /* A field ends at a line break not followed by white space. */
+    let field_ends = header
+        .iter()
+        .enumerate()
+        .filter(|&(i, &c)| c == b'\n' && !matches!(header.get(i + 1), Some(b' ' | b'\t')));
+    for (end, _) in field_ends {
+        out.extend(decode_text(&header[beg..end]));
+        out.push(b'\n');
+        beg = end + 1;
+    }
+    if beg < header.len() {
+        out.extend(decode_text(&header[beg..]));
+    }
+    out
 }
 
 fn decode_anywhere(s: &[u8]) -> Vec<u8> {
@@ -354,6 +376,12 @@ mod tests {
         assert_eq!(decode_utf8("Re: =?UTF-8?B?5pel?=\n (1)"), "Re: 日 (1)");
         assert_eq!(decode_utf8("=?UTF-8?Q?a=0D=0Ab?= =?UNKNOWN?B?YQ==?="), "ab =?UNKNOWN?B?YQ==?=");
         assert_eq!(decode_utf8("=?UTF-8?B?a b?="), "=?UTF-8?B?a b?=");
+    }
+
+    #[test]
+    fn header_field_by_field() {
+        let header = "Subject: =?UTF-8?B?5pel?=\n =?UTF-8?B?5pys?=\nFrom: =?UTF-8?B?6Kqe?=\n";
+        assert_eq!(String::from_utf8(decode_header(header.as_bytes())).unwrap(), "Subject: 日本\nFrom: 語\n");
     }
 
     #[test]
