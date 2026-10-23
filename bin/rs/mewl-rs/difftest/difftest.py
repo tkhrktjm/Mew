@@ -15,12 +15,13 @@ by different names or on different variants of the corpus compare.
 The version printed by -v is replaced with VERSION, as mewl-rs has
 its own.
 
-Suites (--suite, all by default):
+Suites (--suite, all but wellformed by default):
 
   base       options, folders and ranges, scan, sort (-d), -i, -e, -w,
              errors, and 3000 fuzzed pick patterns
   mime       pick and sort on encoded-words (folder +mime)
   uni        pick with Unicode case folding and NFC (folder +uni)
+  utf7       pick and sort on encoded-words in UTF-7 (folder +utf7)
   wellformed 3000 well-formed pick patterns on an empty folder, to see
              that two parsers accept and refuse the same ones
 
@@ -46,7 +47,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SUITES = ("base", "mime", "uni", "wellformed")
+SUITES = ("base", "mime", "uni", "utf7", "wellformed")
 
 
 def make_variant(corpus, work, kind):
@@ -84,12 +85,29 @@ def make_variant(corpus, work, kind):
     return dst
 
 
+def corpus_version(corpus):
+    try:
+        with open(os.path.join(corpus, "VERSION")) as f:
+            return int(f.read())
+    except (OSError, ValueError):
+        return None
+
+
+def mkcorpus_version():
+    sys.path.insert(0, HERE)
+    import mkcorpus
+    return mkcorpus.VERSION
+
+
 class Runner:
     def __init__(self, args):
         work = os.path.abspath(args.work)
         os.makedirs(work, exist_ok=True)
         corpus = os.path.join(work, "corpus")
-        if not os.path.exists(corpus):
+        if corpus_version(corpus) != mkcorpus_version():
+            for name in os.listdir(work):
+                if name == "corpus" or name.startswith("corpus-"):
+                    shutil.rmtree(os.path.join(work, name))
             subprocess.run([sys.executable, os.path.join(HERE, "mkcorpus.py"), corpus], check=True)
         self.home = os.path.join(corpus, "home")
         self.cwd = os.path.join(corpus, "cwd")
@@ -221,6 +239,23 @@ def suite_uni(r):
     r.check(["-d", "subject:", "+uni"])
 
 
+def suite_utf7(r):
+    values = ["日本語", "日本", "日", "Straße", "STRASSE", "café", "CAFÉ", "au lait", "a~b", "a\\b", "+", "-", "!-", "a",
+              "abc", "a b", "AYQ", "~", "x", "\U0001f400", "日-", "+ZeVnLIqe", "ZeV", "&", "a+b&c", ".", "\udce9", ""]
+    for k in ["subject", "x-q", "head"]:
+        for v in values:
+            for op in ["=", "=="]:
+                r.check(["-p", f'{k}{op}"{v}"', "+utf7"])
+    rnd = random.Random(7)
+    chars = "".join(chr(c) for c in range(0x20, 0x7f)) + "日本語のテスト中文한국어éàüß\U0001f400"
+    for _ in range(300):
+        v = "".join(rnd.choices(chars, k=rnd.randint(1, 3))).replace("\\", "").replace('"', "")
+        r.check(["-p", f'{rnd.choice(["subject", "x-q"])}{rnd.choice(["=", "=="])}"{v}"', "+utf7"])
+    r.check(["+utf7"])
+    r.check(["-d", "subject:", "+utf7"])
+    r.check(["-d", "x-q", "+utf7"])
+
+
 TOKENS = ["subject", "from", "head", "references", "to", "x-foo", "=", "==", "!=", "!==", "!", "&", "&&", "|", "||",
           "(", ")", "foo", "FOO", "bar", "\"a b\"", "\\(", "\"", "\\", " ", "<id@x>", "あ", "\udce3", "\udcff",
           "\udc81x", "xあ", ".", "", "=foo", "subject=", "x", "\t"]
@@ -266,7 +301,7 @@ def main():
     p.add_argument("--name-b", default="mewl", help="the name B is invoked as")
     p.add_argument("--corpus-a", default="orig", choices=("orig", "lf", "lfdot", "clean"))
     p.add_argument("--corpus-b", default="orig", choices=("orig", "lf", "lfdot", "clean"))
-    p.add_argument("--suite", default="base,mime,uni", help="comma-separated: " + ", ".join(SUITES))
+    p.add_argument("--suite", default="base,mime,uni,utf7", help="comma-separated: " + ", ".join(SUITES))
     p.add_argument("--seed", type=int, default=1, help="seed of the fuzzed patterns in base")
     p.add_argument("--work", default=os.path.join(HERE, "work"), help="where the corpus is made")
     p.add_argument("--dump", help="append the mismatches to this file as JSON lines")
@@ -278,7 +313,7 @@ def main():
             p.error(f"unknown suite: {s}")
 
     r = Runner(args)
-    for name, fn in (("base", suite_base), ("mime", suite_mime), ("uni", suite_uni),
+    for name, fn in (("base", suite_base), ("mime", suite_mime), ("uni", suite_uni), ("utf7", suite_utf7),
                      ("wellformed", suite_wellformed)):
         if name in suites:
             before = (r.total, r.mismatches)

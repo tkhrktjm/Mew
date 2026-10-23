@@ -28,6 +28,7 @@ mod printer;
 mod source;
 mod sys;
 mod unicode;
+mod utf7;
 
 use std::env;
 use std::fs::File;

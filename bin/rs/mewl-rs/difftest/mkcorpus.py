@@ -13,6 +13,9 @@ DIR/home/Mail gets these folders (HOME is DIR/home when mewl runs):
   a/b, empty  a nested folder and an empty one
   mime        encoded-words of RFC 2047 in many charsets, and broken ones
   uni         Unicode matching: case folding, NFC, width, invalid UTF-8
+  utf7        encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid
+              but without a lone low surrogate, which glibc handles in
+              a way not followed
 
 DIR/cwd gets list1, list2 and list3, the lists for -i, and is where mewl
 runs.
@@ -22,6 +25,9 @@ import base64
 import os
 import random
 import sys
+
+# Bump this when the corpus changes, so that difftest.py makes it again.
+VERSION = 2
 
 
 def w(path, data):
@@ -131,6 +137,48 @@ def make_uni(mail):
     put(b"=?ISO-8859-1?Q?=C4rger?=")
 
 
+def utf7(code_points, imap=False):
+    """A base64 run of UTF-7 for code points but surrogates."""
+    raw = "".join(map(chr, code_points)).encode("utf-16-be")
+    run = base64.b64encode(raw).rstrip(b"=")
+    return run.replace(b"/", b",") if imap else run
+
+
+def make_utf7(mail):
+    """utf7: encoded-words in UTF-7."""
+    mail = os.path.join(mail, "utf7")
+    os.makedirs(mail, exist_ok=True)
+    texts = [
+        ("utf-7", b"+ZeVnLIqe-"), ("UTF-7", b"+ZeVnLIqe"), ("utf7", b"Stra+AN8-e"), ("Utf-7", b"caf+AOk- au lait"),
+        ("utf-7", b"+ZeV-"), ("utf-7", b"a~b"), ("utf-7", b"a\\b"), ("utf-7", b"+"), ("utf-7", b"a+"),
+        ("utf-7", b"+-"), ("utf-7", b"+!-"), ("utf-7", b"+2D3cAA-"), ("utf-7", b"+2D0-"), ("utf-7", b"+2D0AYQ-"),
+        ("utf-7", b"+AGE~"), ("utf-7", b"x+AGE.y"), ("utf-7", b"+Ze"), ("utf-7", b"+AGEAYgBj-"),
+        ("utf-7", b"+ZeV-x+ZeVnLIqe-"), ("utf-7", b"\xe9+AGE-"), ("utf-7", b"+AAA-"), ("utf-7", b"+AGE +AGI-"),
+        ("UTF-7-IMAP", b"&ZeVnLIqe-"), ("utf-7-imap", b"&ZeVnLIqe"), ("utf-7-imap", b"&AGE."),
+        ("utf-7-imap", b"a+b&-c"), ("utf-7-imap", b"&AGE~-"), ("x-utf-7", b"+ZeVnLIqe-"),
+        ("unicode-1-1-utf-7", b"+ZeVnLIqe-"),
+    ]
+    rnd = random.Random(2152)
+    pool = [range(0x20, 0x7f), range(0xa0, 0x800), range(0x3040, 0x30ff), range(0x4e00, 0x9fff),
+            range(0xac00, 0xd7a3), range(0xe000, 0xfffe), range(0x10000, 0x10ffff)]
+    for _ in range(40):
+        imap = rnd.random() < 0.25
+        shift = b"&" if imap else b"+"
+        parts = []
+        for _ in range(rnd.randint(1, 4)):
+            if rnd.random() < 0.6:
+                cps = [rnd.choice(rnd.choice(pool)) for _ in range(rnd.randint(1, 5))]
+                parts.append(shift + utf7(cps, imap) + rnd.choice([b"-", b"-", b"", b" "]))
+            else:
+                parts.append(bytes(rnd.choices(b"abcXYZ019 '(),.:?!*", k=rnd.randint(1, 6))))
+        texts.append(("UTF-7-IMAP" if imap else "UTF-7", b"".join(parts)))
+    for i, (charset, text) in enumerate(texts, 1):
+        b = b"=?" + charset.encode() + b"?B?" + base64.b64encode(text) + b"?="
+        q = b"=?" + charset.encode() + b"?Q?" + b"".join(
+            b"=%02X" % c if c > 126 or c < 33 or c in b"=?_" else bytes([c]) for c in text) + b"?="
+        w(f"{mail}/{i}", b"Subject: " + b + b"\nX-Q: " + q + b"\nFrom: x@example.com\n\nbody\n")
+
+
 def make_lists(cwd):
     """The lists for -i. list2 has a long line and a line with NUL."""
     os.makedirs(cwd, exist_ok=True)
@@ -147,7 +195,9 @@ def main():
     make_base(mail)
     make_mime(mail)
     make_uni(mail)
+    make_utf7(mail)
     make_lists(os.path.join(root, "cwd"))
+    w(os.path.join(root, "VERSION"), b"%d\n" % VERSION)
 
 
 if __name__ == "__main__":

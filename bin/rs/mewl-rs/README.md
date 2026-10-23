@@ -101,12 +101,17 @@ output, and options are the same as `mewl`'s (see `mewl(1)`). As
   compared as it is.
 
 Charsets are converted by encoding_rs (the Encoding Standard), not by
-iconv, and Unicode is normalized by unicode-normalization and
-caseless, not by utf8proc, so a few results differ from `mewl`'s:
+iconv; UTF-7 and UTF-7-IMAP, which the Encoding Standard does not
+know, are converted as glibc does, invalid sequences included. Unicode
+is normalized by unicode-normalization and caseless, not by utf8proc.
+So a few results differ from `mewl`'s:
 
 - 0x8160 of Shift_JIS ("〜") is U+FF5E, while glibc gives U+301C.
-- An encoded-word in a charset unknown to the Encoding Standard,
-  such as UTF-7, is not decoded.
+- An encoded-word in a charset unknown to the Encoding Standard and
+  not UTF-7, such as UTF-32, is not decoded.
+- A lone low surrogate in UTF-7 makes the character completing it
+  invalid, while glibc passes it to the next step of the conversion,
+  which refuses it in a way that depends on the internals of iconv.
 - Characters new in a version of Unicode which one of them does not
   know yet may be normalized differently.
 

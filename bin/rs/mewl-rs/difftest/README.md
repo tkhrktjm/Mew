@@ -16,7 +16,7 @@ Only Python 3 is needed besides the binaries.
 
 - `difftest.py`: the test (`difftest.py --help`).
 - `mkcorpus.py`: makes the corpus; `difftest.py` runs it into
-  `work/` when the corpus is not there yet.
+  `work/` when the corpus is not there yet or is older than it.
 - `classify.py`: sorts the mismatches dumped by `difftest.py --dump`
   by the change that should explain them.
 - `fake-inc`: a stand-in for incm, for `mewl -e`.
@@ -56,6 +56,7 @@ same as mewl.
 | `base` | 3996 | options, folders and ranges, scan, sort (`-d`), `-i`, `-e`, `-w`, errors, and 3000 fuzzed pick patterns |
 | `mime` | 1227 | pick and sort on encoded-words of RFC 2047 |
 | `uni` | 1626 | pick with Unicode case folding and NFC |
+| `utf7` | 471 | pick and sort on encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid |
 | `wellformed` | 3000 | well-formed pick patterns on an empty folder |
 
 `--corpus-a` and `--corpus-b` choose a variant of the corpus for each
@@ -73,17 +74,19 @@ binary, to tell the effects of fixes apart:
 ## Expected results
 
 Against the C mewl of 868ed6f built with iconv and utf8proc 2.10
-(without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 24
-of the 6849 cases, all in the `mime` suite and for two reasons:
+(without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 12
+of the 7320 cases, all in the `mime` suite and for one reason:
 charsets are converted by encoding_rs, not by iconv, so 0x8160 of
-Shift_JIS ("〜") is U+FF5E rather than U+301C, and an encoded-word in
-UTF-7, unknown to the Encoding Standard, is not decoded.
+Shift_JIS ("〜") is U+FF5E rather than U+301C.
 
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 6849 run, 24 mismatches
+TOTAL: 7320 run, 12 mismatches
 ```
+
+The corpus has no lone low surrogate in UTF-7, which mewl-rs takes
+as invalid while glibc goes its own way (see src/utf7.rs).
 
 ## Reproducing the counts in the commit messages
 
@@ -106,9 +109,14 @@ commit after main). The commands are run in this directory.
 | | `./difftest.py --suite wellformed rs/6 rs/6 --name-a mewl-rs-compat --name-b mewl-rs` | 3000 run, 0 mismatches |
 | 7. fix the bugs that need no change of Mew | `./difftest.py --suite base,mime rs/6 rs/7 --name-a mewl-rs --name-b mewl-rs` | 5223 run, 1021 mismatches |
 | | the same with `--corpus-a clean --corpus-b clean --dump 7.jsonl`, then `./classify.py bugfix 7.jsonl` | 423: invalid number 52, invalid range 43, `-d` without ":" 50, 0xff in pattern 260, NUL in a list 16, `-h`/`-:` 2 |
-| 8. follow main in Unicode matching | `./difftest.py C-868ed6f rs/8 --name-b mewl-rs-compat` | 6849 run, 24 mismatches |
-| | `./difftest.py rs/7 rs/8 --name-a mewl-rs --name-b mewl-rs --dump 8.jsonl`, then `./classify.py pick 8.jsonl` | 253: all picks on a field |
+| 8. follow main in Unicode matching | `./difftest.py --suite base,mime,uni C-868ed6f rs/8 --name-b mewl-rs-compat` | 6849 run, 24 mismatches |
+| | `./difftest.py --suite base,mime,uni rs/7 rs/8 --name-a mewl-rs --name-b mewl-rs --dump 8.jsonl`, then `./classify.py pick 8.jsonl` | 253: all picks on a field |
+| 10. convert UTF-7 as glibc does | `./difftest.py C-868ed6f rs/10 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
+| | `./difftest.py --suite utf7 C-868ed6f rs/10 --name-b mewl-rs-compat` | 471 run, 0 mismatches |
+| | `./difftest.py rs/9 rs/10 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 196 mismatches: 12 in `+mime`, 184 in `+utf7` |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 240 mismatches: 20 in `+mime`, 220 in `+utf7` |
 
-mewl-rs-compat changes only in steps 4 and 8, which follow main; in
-the other steps it is the same as before, e.g. 0 mismatches between
-rs/6 and rs/7 both invoked as mewl-rs-compat.
+mewl-rs-compat changes only in steps 4 and 8, which follow main, and
+in step 10, which decodes UTF-7; in the other steps it is the same as
+before, e.g. 0 mismatches between rs/6 and rs/7 both invoked as
+mewl-rs-compat.
