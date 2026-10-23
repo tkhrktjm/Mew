@@ -10,7 +10,8 @@
 //! mewl converts charsets with iconv while this uses encoding_rs (the
 //! Encoding Standard), so a few characters may be converted
 //! differently, e.g. 0x8160 of Shift_JIS is U+301C by glibc but U+FF5E
-//! here.
+//! here. UTF-7, unknown to the Encoding Standard, is converted by
+//! [`crate::utf7`] as glibc does.
 //!
 //! [`decode_text`] is for `mewl-rs` (not `mewl-rs-compat`) and more
 //! lenient:
@@ -27,6 +28,8 @@
 //! Otherwise it is the same as [`decode_field`].
 
 use encoding_rs::{DecoderResult, Encoding, ISO_2022_JP, SHIFT_JIS};
+
+use crate::utf7;
 
 const ESC: u8 = 0x1b;
 const DEL: u8 = 0x7f;
@@ -117,7 +120,7 @@ fn decode_anywhere(s: &[u8]) -> Vec<u8> {
             out.extend(between.iter().filter(|&&c| c != b'\r' && c != b'\n'));
         }
         match &mut pending {
-            Some(p) if p.encoding == word.encoding && word.encoding != ISO_2022_JP => p.bytes.extend(word.bytes),
+            Some(p) if p.charset == word.charset && word.charset.joinable() => p.bytes.extend(word.bytes),
             _ => {
                 flush(&mut out, pending.take());
                 pending = Some(word);
@@ -160,9 +163,53 @@ fn decode_word(word: &[u8], out: &mut Vec<u8>) -> bool {
     }
 }
 
+/// A charset of an encoded-word that can be converted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Charset {
+    /// By encoding_rs.
+    Encoding(&'static Encoding),
+    /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
+    Utf7(utf7::Variant),
+}
+
+impl Charset {
+    /// The charset for a MIME charset name.
+    fn for_name(name: &[u8]) -> Option<Self> {
+        if let Some(variant) = utf7::Variant::for_charset(name) {
+            return Some(Charset::Utf7(variant));
+        }
+        if let Some(encoding) = Encoding::for_label_no_replacement(name) {
+            return Some(Charset::Encoding(encoding));
+        }
+        /* Names known to iconv but not to the Encoding Standard. */
+        match name.to_ascii_lowercase().as_slice() {
+            b"cp932" | b"ms932" => Some(Charset::Encoding(SHIFT_JIS)),
+            b"iso-2022-jp-1" | b"iso-2022-jp-2" | b"iso-2022-jp-3" => Some(Charset::Encoding(ISO_2022_JP)),
+            _ => None,
+        }
+    }
+
+    /// Whether adjacent encoded-words in this charset may be converted
+    /// together. Not for a stateful charset whose encoded-word begins
+    /// and ends in its initial state, ISO-2022-JP and UTF-7: joined, a
+    /// shift right after another one would be an error.
+    fn joinable(self) -> bool {
+        self != Charset::Encoding(ISO_2022_JP) && !matches!(self, Charset::Utf7(_))
+    }
+
+    /// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte
+    /// sequence is kept as it is; otherwise it fails.
+    fn convert(self, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+        match self {
+            Charset::Encoding(encoding) => convert(encoding, input, keep_invalid),
+            Charset::Utf7(variant) => utf7::convert(variant, input, keep_invalid),
+        }
+    }
+}
+
 /// An encoded-word decoded into bytes in its charset.
 struct Word {
-    encoding: &'static Encoding,
+    charset: Charset,
     bytes: Vec<u8>,
 }
 
@@ -194,14 +241,14 @@ impl Word {
             b'Q' => decode_q(text)?,
             _ => return None,
         };
-        let encoding = encoding_for(charset)?; /* unknown charset */
-        Some(Word { encoding, bytes })
+        let charset = Charset::for_name(charset)?; /* unknown charset */
+        Some(Word { charset, bytes })
     }
 
     /// Converts to UTF-8 and appends it to `out`. `false` (and nothing
     /// appended) if it fails.
     fn convert_into(self, out: &mut Vec<u8>) -> bool {
-        let converted = convert(self.encoding, &self.bytes, false).or_else(|| convert(self.encoding, &self.bytes, true));
+        let converted = self.charset.convert(&self.bytes, false).or_else(|| self.charset.convert(&self.bytes, true));
         let Some(text) = converted else {
             return false;
         };
@@ -216,21 +263,8 @@ fn is_token(c: u8) -> bool {
     c > b' ' && c < DEL && !b"()<>@,;:\\\"/[]?.=".contains(&c)
 }
 
-/// The encoding for a MIME charset name.
-fn encoding_for(charset: &[u8]) -> Option<&'static Encoding> {
-    if let Some(encoding) = Encoding::for_label_no_replacement(charset) {
-        return Some(encoding);
-    }
-    /* Names known to iconv but not to the Encoding Standard. */
-    match charset.to_ascii_lowercase().as_slice() {
-        b"cp932" | b"ms932" => Some(SHIFT_JIS),
-        b"iso-2022-jp-1" | b"iso-2022-jp-2" | b"iso-2022-jp-3" => Some(ISO_2022_JP),
-        _ => None,
-    }
-}
-
-/// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte
-/// sequence is kept as it is; otherwise it fails.
+/// Converts `input` to UTF-8 by encoding_rs. With `keep_invalid`, an
+/// invalid byte sequence is kept as it is; otherwise it fails.
 fn convert(encoding: &'static Encoding, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
     let mut decoder = encoding.new_decoder_without_bom_handling();
     let size = decoder.max_utf8_buffer_length_without_replacement(input.len())?;
@@ -320,6 +354,12 @@ mod tests {
     #[test]
     fn charsets_and_encodings() {
         assert_eq!(decode("=?UTF-8?B?5pel5pys6Kqe?="), "日本語");
+        assert_eq!(decode("=?UTF-7?Q?+ZeVnLIqe-?="), "日本語");
+        assert_eq!(decode("=?utf7?B?K1plVm5MSXFlLQ==?="), "日本語");
+        assert_eq!(decode("=?UTF-7-IMAP?Q?&ZeVnLIqe-?="), "日本語");
+        /* Invalid bytes are kept, and so are encoded-words in UTF-7 in
+        the words before and after. */
+        assert_eq!(decode("=?UTF-7?Q?+ZeV-?= =?UTF-7?Q?+ZeV-?="), "日-日-");
         assert_eq!(decode("=?utf-8?b?5pel5pys6Kqe?="), "日本語");
         assert_eq!(decode("=?ISO-8859-1?Q?caf=E9_au_lait?="), "café au lait");
         assert_eq!(decode("=?ISO-2022-JP?B?GyRCRnxLXDhsGyhC?="), "日本語");

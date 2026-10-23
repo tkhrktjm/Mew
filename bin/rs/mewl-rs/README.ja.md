@@ -98,13 +98,18 @@ Mew の変更を要するバグは直していない。たとえば、Mew は `m
   正しい UTF-8 でなければ、ASCII 文字の大文字小文字だけを区別せずに
   バイトごとに比べる。キー `head` はそのまま比べる。
 
-charset の変換は iconv ではなく encoding_rs (Encoding Standard) により、
-Unicode の正規化は utf8proc ではなく unicode-normalization と caseless に
-よるので、`mewl` と結果が異なる場合が少しある:
+charset の変換は iconv ではなく encoding_rs (Encoding Standard) による。
+ただし Encoding Standard が知らない UTF-7 と UTF-7-IMAP は、不正な並びも
+含めて glibc と同じように変換する。Unicode の正規化は utf8proc ではなく
+unicode-normalization と caseless による。そのため、`mewl` と結果が
+異なる場合が少しある:
 
 - Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
-- Encoding Standard が知らない charset、たとえば UTF-7 の encoded-word は
-  復号しない。
+- Encoding Standard が知らず UTF-7 でもない charset、たとえば UTF-32 の
+  encoded-word は復号しない。
+- UTF-7 中の対にならない下位サロゲートは、それを補う文字を不正にする。
+  glibc はこれを変換の次の段階に渡し、そこで iconv の内部に依存する形で
+  拒否される。
 - どちらかがまだ知らない新しい版の Unicode の文字は、正規化の結果が
   異なることがある。
 
