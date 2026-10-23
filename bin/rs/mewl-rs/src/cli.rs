@@ -22,7 +22,7 @@ const OPTSTRING: &[u8] = b"ab:c:d:e:f:hi:l:m:np:s:vwx:";
 const MAX_FOLDER: usize = 16;
 
 /* Some lines end with a space as mewl does. mewl lacks "<suffix>"
-in the line of -x (see help()). */
+in the line of -x and "==" and "!==" in <pattern> (see help()). */
 const HELP: &str = " -a            Print all necessary fields when picking.
  -b  <mdir>    Mail home.
  -c  <bodylen> Max body length to dump.
@@ -41,7 +41,8 @@ const HELP: &str = " -a            Print all necessary fields when picking.
  -x  <suffix>  Use this suffix.
 
 <range> = N | [start]-[end] | last:N
-<pattern> = 'key=val' | 'key!=val' | '!<pattern>' | '(<pattern>)'\x20
+<pattern> = 'key=val' | 'key!=val' | 'key==val' | 'key!==val'
+          | '!<pattern>' | '(<pattern>)'\x20
           | '<pattern>&<pattern>'\x20
           | '<pattern>|<pattern>'\x20
 
@@ -249,7 +250,10 @@ pub fn help(progname: &[u8], flavor: Flavor) {
     usage(progname);
     let help = match flavor.fixes_bugs() {
         true => HELP.to_string(),
-        false => HELP.replace(" -x  <suffix>  ", " -x            "),
+        false => HELP.replace(" -x  <suffix>  ", " -x            ").replace(
+            "'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>'",
+            "'key=val' | 'key!=val' | '!<pattern>'",
+        ),
     };
     let _ = io::stderr().write_all(help.as_bytes());
 }
