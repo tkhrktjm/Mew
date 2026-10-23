@@ -284,4 +284,6 @@ fn options() {
     assert_eq!(f.run_raw("mewl-rs-compat", &["-:"]).2, "Usage: mewl-rs-compat [options] [folder [range]]\n");
     assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n -x  <suffix>  Use this suffix.\n"));
     assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n -x            Use this suffix.\n"));
+    assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n<pattern> = 'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>' | '(<pattern>)' \n"));
+    assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n<pattern> = 'key=val' | 'key!=val' | '!<pattern>' | '(<pattern>)' \n          | '<pattern>&<pattern>' \n"));
 }

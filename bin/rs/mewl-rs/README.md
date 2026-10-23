@@ -89,7 +89,8 @@ It also fixes some bugs of `mewl`:
   message. A message must be a regular file.
 - The value of `-d key` without `:` does not begin with `:`.
 - 0xFF in a pattern is a byte, not the end of the pattern.
-- `-:` is an unknown option, and the help shows the argument of `-x`.
+- `-:` is an unknown option, and the help shows the argument of `-x`
+  and lists `key==val` and `key!==val` among the patterns.
 
 Bugs that need Mew to change are not fixed: for instance, Mew does not
 see the exit status nor the error messages of `mewl`, and passes a
