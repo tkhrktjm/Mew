@@ -24,12 +24,14 @@
 //!   be an error.
 //! - Raw ISO-2022-JP, which old Japanese mailers put in headers without
 //!   encoding, is converted.
+//! - UTF-7 is converted as the RFCs specify, not as glibc does: an
+//!   invalid shifted sequence is kept as a whole.
 //!
 //! Otherwise it is the same as [`decode_field`].
 
 use encoding_rs::{DecoderResult, Encoding, ISO_2022_JP, SHIFT_JIS};
 
-use crate::utf7;
+use crate::utf7::{self, Rules};
 
 const ESC: u8 = 0x1b;
 const DEL: u8 = 0x7f;
@@ -137,7 +139,7 @@ fn decode_anywhere(s: &[u8]) -> Vec<u8> {
 
 fn flush(out: &mut Vec<u8>, word: Option<Word>) {
     if let Some(word) = word {
-        word.convert_into(out);
+        word.convert_into(out, Rules::Rfc);
     }
 }
 
@@ -158,7 +160,7 @@ fn find_word(s: &[u8]) -> Option<(usize, Word)> {
 /// `false` (and nothing appended) if `word` is not an encoded-word.
 fn decode_word(word: &[u8], out: &mut Vec<u8>) -> bool {
     match Word::parse(word) {
-        Some(word) => word.convert_into(out),
+        Some(word) => word.convert_into(out, Rules::Glibc),
         None => false,
     }
 }
@@ -197,12 +199,12 @@ impl Charset {
         self != Charset::Encoding(ISO_2022_JP) && !matches!(self, Charset::Utf7(_))
     }
 
-    /// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte
-    /// sequence is kept as it is; otherwise it fails.
-    fn convert(self, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+    /// Converts `input` to UTF-8, UTF-7 by `rules`. With `keep_invalid`,
+    /// an invalid byte sequence is kept as it is; otherwise it fails.
+    fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
         match self {
             Charset::Encoding(encoding) => convert(encoding, input, keep_invalid),
-            Charset::Utf7(variant) => utf7::convert(variant, input, keep_invalid),
+            Charset::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
         }
     }
 }
@@ -245,10 +247,11 @@ impl Word {
         Some(Word { charset, bytes })
     }
 
-    /// Converts to UTF-8 and appends it to `out`. `false` (and nothing
-    /// appended) if it fails.
-    fn convert_into(self, out: &mut Vec<u8>) -> bool {
-        let converted = self.charset.convert(&self.bytes, false).or_else(|| self.charset.convert(&self.bytes, true));
+    /// Converts to UTF-8, UTF-7 by `rules`, and appends it to `out`.
+    /// `false` (and nothing appended) if it fails.
+    fn convert_into(self, out: &mut Vec<u8>, rules: Rules) -> bool {
+        let charset = self.charset;
+        let converted = charset.convert(&self.bytes, rules, false).or_else(|| charset.convert(&self.bytes, rules, true));
         let Some(text) = converted else {
             return false;
         };
@@ -416,6 +419,9 @@ mod tests {
         assert_eq!(decode_utf8("Re: =?UTF-8?B?5pel?=\n (1)"), "Re: 日 (1)");
         assert_eq!(decode_utf8("=?UTF-8?Q?a=0D=0Ab?= =?UNKNOWN?B?YQ==?="), "ab =?UNKNOWN?B?YQ==?=");
         assert_eq!(decode_utf8("=?UTF-8?B?a b?="), "=?UTF-8?B?a b?=");
+        /* UTF-7 as the RFCs specify. */
+        assert_eq!(decode_utf8("=?UTF-7?Q?+ZeVnLIqe-?="), "日本語");
+        assert_eq!(decode_utf8("=?UTF-7?Q?+ZeV-?= =?UTF-7?Q?a+ZeU-?="), "+ZeV-a日");
     }
 
     #[test]
