@@ -28,6 +28,12 @@ Mew のメッセージ・スキャナ `mewl` を Rust に移植したもの。
 
 `mewl` という名前のリンクにすれば、`mewl` をそのまま置き換えられる。
 
+## テスト
+
+`cargo test` は単体テストとバイナリのテストを実行する。`difftest/` は
+メッセージのコーパスで mewl-rs と C 版の mewl を比べる。
+difftest/README.ja.md を参照。
+
 ## mewl-rs
 
 `mewl-rs` として起動すると、`mewl` よりも多くを復号する:

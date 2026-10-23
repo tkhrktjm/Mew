@@ -26,6 +26,12 @@ So make a link, symbolic or hard, for the other name:
 
 A link named `mewl` makes it a drop-in replacement for `mewl`.
 
+## Testing
+
+`cargo test` runs the unit tests and the tests of the binary.
+`difftest/` compares mewl-rs with the C mewl over a corpus of
+messages; see difftest/README.md.
+
 ## mewl-rs
 
 Invoked as `mewl-rs`, it decodes more than `mewl` does:

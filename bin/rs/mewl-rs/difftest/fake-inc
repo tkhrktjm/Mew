@@ -1,0 +1,13 @@
+#!/bin/sh
+# A stand-in for incm, for "mewl -e fake-inc": prints the arguments to
+# stderr, and names of message files and CD: lines to stdout.
+echo "args: $*" >&2
+echo 1
+echo "  2.mew"
+echo 3.mew
+echo nonexist
+printf 'CD: +rand\n'
+echo 7
+echo 8.mew
+printf 'CD:\t+my folder\n'
+echo 2
