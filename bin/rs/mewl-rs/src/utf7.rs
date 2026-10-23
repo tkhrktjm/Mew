@@ -52,9 +52,10 @@
 //!   printable US-ASCII, and may not begin right after another one
 //!   ends (a null shift).
 //!
-//! An invalid shifted sequence is kept as it is, undecoded, and so is
-//! an invalid character outside base64; decoding goes on after it from
-//! the initial state.
+//! An invalid shifted sequence, which is US-ASCII, is kept as it is,
+//! undecoded, and so is an invalid US-ASCII character outside base64;
+//! a byte not in US-ASCII is replaced with U+FFFD, so that the output
+//! is UTF-8. Decoding goes on after it from the initial state.
 
 /// How an invalid sequence is found and what follows it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -221,8 +222,8 @@ impl Decoder {
 }
 
 /// Converts `input` to UTF-8 by `rules`. With `keep_invalid`, what is
-/// invalid is kept as it is and the conversion goes on; otherwise
-/// `None` is returned for it.
+/// invalid is kept as it is (or replaced, see [`Rules::Rfc`]) and the
+/// conversion goes on; otherwise `None` is returned for it.
 pub fn convert(variant: Variant, rules: Rules, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
     match rules {
         Rules::Glibc => convert_glibc(variant, input, keep_invalid),
@@ -276,6 +277,7 @@ fn convert_rfc(variant: Variant, input: &[u8], keep_invalid: bool) -> Option<Vec
         match decoded {
             Some(text) => out.extend_from_slice(text.as_bytes()),
             None if !keep_invalid => return None,
+            None if !c.is_ascii() => out.extend_from_slice(char::REPLACEMENT_CHARACTER.to_string().as_bytes()),
             None => out.extend_from_slice(&input[pos..end]),
         }
         pos = end;
@@ -427,7 +429,8 @@ mod tests {
         assert_eq!(rfc_kept(b"a+ZeV.+AGE-b"), b"a+ZeV.ab");
         assert_eq!(rfc_kept(b"+3AAAYQ-x"), b"+3AAAYQ-x");
         assert_eq!(rfc_kept(b"+!-"), b"+!-");
-        assert_eq!(rfc_kept(b"a~+AGE-\xe9"), b"a~a\xe9");
+        /* but a byte not in US-ASCII is replaced. */
+        assert_eq!(rfc_kept(b"a~+AGE-\xe9\xe9"), "a~a\u{fffd}\u{fffd}".as_bytes());
         assert_eq!(rfc_kept(b"a+"), b"a+");
     }
 
