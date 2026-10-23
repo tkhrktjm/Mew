@@ -111,10 +111,26 @@ fn compat_decodes_fields_when_picking() {
     assert_eq!(f.run("mewl-rs-compat", &["-p", "from==山田", "+inbox"]), "1\n");
     /* but not the whole header. */
     assert_eq!(f.run("mewl-rs-compat", &["-p", "head==件名", "+inbox"]), "");
-    /* mewl on glibc never matches a value beginning with a byte >= 0x80
-    ignoring case. */
-    if cfg!(all(target_os = "linux", target_env = "gnu")) {
-        assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=日本語", "+inbox"]), "");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=日本語", "+inbox"]), "1\n2\n4\n");
+}
+
+#[test]
+fn unicode_matching() {
+    let f = Fixture::new("unicode");
+    f.write("u/1", "Subject: Straße\n\n".as_bytes());
+    f.write("u/2", "Subject: \u{c4}rger\n\n".as_bytes());
+    f.write("u/3", "Subject: A\u{308}RGER\n\n".as_bytes());
+    f.write("u/4", "Subject: ＡＢＣ\n\n".as_bytes());
+    for prog in ["mewl-rs", "mewl-rs-compat"] {
+        /* full case folding and NFC */
+        assert_eq!(f.run(prog, &["-p", "subject=STRASSE", "+u"]), "1\n");
+        assert_eq!(f.run(prog, &["-p", "subject=\u{e4}rger", "+u"]), "2\n3\n");
+        /* NFC only */
+        assert_eq!(f.run(prog, &["-p", "subject==A\u{308}rger", "+u"]), "2\n");
+        /* width is not folded */
+        assert_eq!(f.run(prog, &["-p", "subject=abc", "+u"]), "");
+        /* the whole header is not normalized */
+        assert_eq!(f.run(prog, &["-p", "head=STRASSE", "+u"]), "");
     }
 }
 

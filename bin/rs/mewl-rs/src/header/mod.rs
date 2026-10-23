@@ -21,6 +21,7 @@ pub use fields::{BodyLine, FieldSet, Summary};
 
 use crate::bytes::{BytesExt, Case};
 use crate::flavor::Flavor;
+use crate::unicode;
 
 /// 64k, now even 16k is not enough.
 pub const MAX_HEADER: usize = 65536;
@@ -270,9 +271,9 @@ impl Header {
     /// `head` means the whole header. How a value is decoded and
     /// compared depends on the [`Flavor`].
     pub fn search(&mut self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
-        let case = if case_sensitive { Case::Sensitive } else { self.flavor.ignore_case() };
-
         if key == WHOLE_HEADER {
+            /* neither decoded (by mewl) nor normalized */
+            let case = if case_sensitive { Case::Sensitive } else { Case::Ignore };
             let header = self.c_str(0, self.end_of_header());
             return self.flavor.whole_header(header).contains_bytes(value, case);
         }
@@ -283,7 +284,7 @@ impl Header {
             let end = self.next_field(p, true);
             if matched {
                 let body = self.c_str(p + key.len(), self.body_end(&end));
-                if self.flavor.field_body(body).contains_bytes(value, case) {
+                if unicode::field_match(&self.flavor.field_body(body), value, case_sensitive) {
                     return true;
                 }
             }
@@ -357,7 +358,7 @@ mod tests {
         let mut mewl = header(data, 5, Flavor::Compat);
         let mut utf8 = header(data, 5, Flavor::Utf8);
         assert!(mewl.search(b"subject", "日本".as_bytes(), true));
-        assert_eq!(mewl.search(b"subject", "日本".as_bytes(), false), !crate::compat::GLIBC);
+        assert!(mewl.search(b"subject", "日本".as_bytes(), false));
         assert!(utf8.search(b"subject", "日本".as_bytes(), false));
         assert!(!mewl.search(b"x", "日".as_bytes(), true));
         assert!(utf8.search(b"x", "Re:日".as_bytes(), true));

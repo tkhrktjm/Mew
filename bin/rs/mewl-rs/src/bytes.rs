@@ -7,11 +7,6 @@ pub enum Case {
     /// Ignoring the case of ASCII letters, as `strncasecmp()` in the
     /// C locale.
     Ignore,
-    /// [`Case::Ignore`] as mewl on glibc: a value beginning with a
-    /// byte of 0x80 or more never matches. mewl compares the first
-    /// character with `tolower(c)` and `toupper(c)`, which map a
-    /// negative `char` to 128..255 on glibc.
-    IgnoreAsGlibc,
 }
 
 pub trait BytesExt {
@@ -40,14 +35,13 @@ impl BytesExt for [u8] {
     }
 
     fn contains_bytes(&self, needle: &[u8], case: Case) -> bool {
-        let Some(&first) = needle.first() else {
+        if needle.is_empty() {
             return true;
-        };
+        }
         let mut windows = self.windows(needle.len());
         match case {
             Case::Sensitive => windows.any(|w| w == needle),
-            Case::IgnoreAsGlibc if first >= 0x80 => false,
-            Case::Ignore | Case::IgnoreAsGlibc => windows.any(|w| w.eq_ignore_ascii_case(needle)),
+            Case::Ignore => windows.any(|w| w.eq_ignore_ascii_case(needle)),
         }
     }
 }
@@ -63,8 +57,6 @@ mod tests {
         assert!(b"Hello World".contains_bytes(b"o w", Case::Ignore));
         assert!(b"abc".contains_bytes(b"", Case::Sensitive));
         assert!("日本語".as_bytes().contains_bytes("本".as_bytes(), Case::Ignore));
-        assert!(!"日本語".as_bytes().contains_bytes("本".as_bytes(), Case::IgnoreAsGlibc));
-        assert!("x日本語".as_bytes().contains_bytes("x日".as_bytes(), Case::IgnoreAsGlibc));
     }
 
     #[test]

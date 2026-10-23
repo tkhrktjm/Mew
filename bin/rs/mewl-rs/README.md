@@ -38,9 +38,6 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   so that a multibyte character split between them is restored.
 - Raw ISO-2022-JP in a header, which old Japanese mailers wrote
   without encoding, is converted to UTF-8.
-- A value in UTF-8 matches ignoring case (`key=val`). `mewl` on glibc
-  never matches a value beginning with a byte >= 0x80 ignoring case,
-  so `subject=日本語` finds nothing there.
 
 It also fixes some bugs of `mewl`:
 
@@ -86,15 +83,26 @@ the same as `mewl`'s since Mew decodes it. Tell Mew to use it:
 
 Invoked as `mewl-rs-compat`, or by any name but `mewl-rs`, its input,
 output, and options are the same as `mewl`'s (see `mewl(1)`). As
-`mewl` built with iconv, encoded-words of RFC 2047 in a field body are
-decoded into UTF-8 when picking (`-p key=val`).
+`mewl` built with iconv and utf8proc (but not with
+`--enable-utf8proc-char-fold`), when picking (`-p key=val`):
+
+- encoded-words of RFC 2047 in a field body are decoded into UTF-8;
+- `=` and `!=` compare a field body with the value after Unicode full
+  case folding and canonical composition (NFC), so that "Straße"
+  matches "STRASSE"; `==` and `!==` after NFC only. Width is not
+  folded. When either is not valid UTF-8, they are compared byte by
+  byte, ignoring the case of ASCII letters only. The key `head` is
+  compared as it is.
 
 Charsets are converted by encoding_rs (the Encoding Standard), not by
-iconv, so a few results differ from `mewl`'s:
+iconv, and Unicode is normalized by unicode-normalization and
+caseless, not by utf8proc, so a few results differ from `mewl`'s:
 
 - 0x8160 of Shift_JIS ("〜") is U+FF5E, while glibc gives U+301C.
 - An encoded-word in a charset unknown to the Encoding Standard,
   such as UTF-7, is not decoded.
+- Characters new in a version of Unicode which one of them does not
+  know yet may be normalized differently.
 
 Two more things differ from `mewl`, which Mew does not depend on:
 

@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 
 use crate::bytes::{BytesExt, Case};
-use crate::compat::GLIBC;
 use crate::mime;
 use crate::pattern::{Pattern, PatternError};
 
@@ -11,14 +10,15 @@ use crate::pattern::{Pattern, PatternError};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Flavor {
     /// `mewl-rs-compat` (and any name but `mewl-rs`): the same as mewl,
-    /// which decodes encoded-words in a field body searched by pick.
+    /// which decodes encoded-words in a field body searched by pick and
+    /// compares it after normalizing Unicode (see [`crate::unicode`]).
     Compat,
     /// `mewl-rs`: in addition, the value printed by sort (`-d`)
     /// and the whole header searched by pick (`head`) are decoded,
     /// encoded-words are found anywhere and a character split between
-    /// them is restored, raw ISO-2022-JP is converted, and a value in
-    /// UTF-8 matches ignoring case on glibc, too. Bugs of mewl which
-    /// do not need Mew to change are fixed (see [`Flavor::fixes_bugs`]).
+    /// them is restored, and raw ISO-2022-JP is converted. Bugs of mewl
+    /// which do not need Mew to change are fixed (see
+    /// [`Flavor::fixes_bugs`]).
     Utf8,
 }
 
@@ -42,14 +42,6 @@ impl Flavor {
     /// where this matters tells which bug.
     pub(crate) fn fixes_bugs(self) -> bool {
         self == Flavor::Utf8
-    }
-
-    /// How `key=val` compares ignoring case.
-    pub(crate) fn ignore_case(self) -> Case {
-        match self {
-            Flavor::Compat if GLIBC => Case::IgnoreAsGlibc,
-            Flavor::Compat | Flavor::Utf8 => Case::Ignore,
-        }
     }
 
     /// The text that pick compares for a field. `body` follows the key,
