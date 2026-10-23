@@ -180,6 +180,7 @@ private void set_fld_rng(struct fld_rng *, char *, char *);
 private void dbuf_reserve(struct dbuf *, size_t);
 private void dbuf_append(struct dbuf *, const char *, size_t);
 private char *decode_field(const char *);
+private char *decode_header(char *, char *);
 private int  decode_word(const char *, size_t, struct dbuf *);
 private iconv_t get_iconv_to_utf8(const char *);
 private int  iconv_to_utf8(const char *, const char *, size_t, struct dbuf *,
@@ -715,22 +716,21 @@ search_string(char *key, char *value, int case_sensitive) {
 	char *p = Search_ctx_buf, *limp = p + Search_ctx_lim, tmp;
 
 	if (strcmp(HEAD, key) == 0) {
+		int found;
+
+#ifdef HAVE_ICONV
+		if ((dec = decode_header(p, limp)) != NULL) {
+			found = field_match(dec, value, case_sensitive);
+			free(dec);
+			return found;
+		}
+#endif /* HAVE_ICONV */
 		end = eoh(p, limp);
 		tmp = *end;
 		*end = NUL;
-		if (case_sensitive == YES) {
-			if (strstr(p, value) != NULL) {
-				*end = tmp;
-				return TRUE;
-			}
-		} else {
-			if (mystrcasestr(p, value) != NULL) {
-				*end = tmp;
-				return TRUE;
-			}
-		}
+		found = field_match(p, value, case_sensitive);
 		*end = tmp;
-		return FALSE;
+		return found;
 	}
 		
 	for (;;) {
@@ -842,6 +842,59 @@ decode_field(const char *str) {
 		p = e;
 	}
 
+	return ret.buf;
+}
+
+/*
+ * Decode the encoded-words in every field of the header at hdr, for the
+ * key "head".  Each field keeps its name and its terminating newline,
+ * so that a match cannot run from one field into the next, and a field
+ * body without "=?" is copied as it is.  The header ends at the blank
+ * line, or at the end of the buffer when there is none (see eoh()).
+ * Returns a malloc()ed string, or NULL when no field has an
+ * encoded-word, in which case the header is to be compared as it is.
+ */
+private char *
+decode_header(char *hdr, char *lim) {
+	struct dbuf ret;
+	char *q, *r, *fend, *last, *colon, *dec, *dummy, tmp;
+	int any = NO;
+
+	ret.len = 0;
+	ret.siz = (size_t)(lim - hdr) + 1;
+	MALLOC(ret.buf, ret.siz);
+	ret.buf[0] = NUL;
+	for (q = hdr; q < lim && *q != LF; q = r) {
+		/* r: the next field, the blank line, or NULL at the end */
+		r = nextfield(q, lim, &dummy, NULL, YES);
+		fend = (r != NULL) ? r : lim;
+		last = fend - 1;	/* the LF ending this field, see read_header() */
+		if (last <= q || *last != LF) {
+			dbuf_append(&ret, q, fend - q);
+			if (r == NULL)
+				break;
+			continue;
+		}
+		tmp = *last;
+		*last = NUL;
+		colon = strchr(q, ':');
+		if (colon != NULL && strstr(colon + 1, "=?") != NULL) {
+			dec = decode_field(colon + 1);
+			dbuf_append(&ret, q, colon + 1 - q);
+			dbuf_append(&ret, dec, strlen(dec));
+			free(dec);
+			any = YES;
+		} else
+			dbuf_append(&ret, q, last - q);
+		*last = tmp;
+		dbuf_append(&ret, "\n", 1);
+		if (r == NULL)
+			break;
+	}
+	if (any == NO) {
+		free(ret.buf);
+		return NULL;
+	}
 	return ret.buf;
 }
 
