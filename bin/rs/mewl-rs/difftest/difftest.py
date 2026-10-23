@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Differential test of two mewl binaries.
+
+Runs mewl A and mewl B with the same arguments and input over a corpus
+made by mkcorpus.py, and compares the exit status, stdout, and stderr
+of each run.
+
+  difftest.py [options] A B
+
+Each binary runs through a symbolic link named --name-a or --name-b
+("mewl" by default), since mewl-rs acts by the name it is invoked as.
+The name of the program in messages ("mewl: ...") and the path of the
+corpus are replaced with PROG and $HOME before comparing, so that runs
+by different names or on different variants of the corpus compare.
+The version printed by -v is replaced with VERSION, as mewl-rs has
+its own.
+
+Suites (--suite, all by default):
+
+  base       options, folders and ranges, scan, sort (-d), -i, -e, -w,
+             errors, and 3000 fuzzed pick patterns
+  mime       pick and sort on encoded-words (folder +mime)
+  uni        pick with Unicode case folding and NFC (folder +uni)
+  wellformed 3000 well-formed pick patterns on an empty folder, to see
+             that two parsers accept and refuse the same ones
+
+Variants of the corpus (--corpus-a, --corpus-b):
+
+  orig   as made by mkcorpus.py
+  lf     a newline added to every message not ending with one
+  lfdot  lf, and a line added after a last line beginning with "."
+  clean  empty and headerless messages removed, and every message
+         ending its header with an empty line
+
+The mismatches can be written to a file (--dump) for classify.py.
+"""
+
+import argparse
+import json
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+SUITES = ("base", "mime", "uni", "wellformed")
+
+
+def make_variant(corpus, work, kind):
+    """The corpus of the variant `kind`, made from `corpus` if needed."""
+    if kind == "orig":
+        return corpus
+    dst = os.path.join(work, "corpus-" + kind)
+    if os.path.exists(dst):
+        return dst
+    shutil.copytree(corpus, dst, symlinks=True)
+    for root, _, files in os.walk(os.path.join(dst, "home", "Mail")):
+        for fn in files:
+            path = os.path.join(root, fn)
+            if os.path.islink(path):
+                continue
+            with open(path, "rb") as f:
+                data = f.read()
+            if kind == "clean":
+                if not data or data.startswith(b"\n"):
+                    os.remove(path)
+                    continue
+                if not data.endswith(b"\n"):
+                    data += b"\n"
+                if b"\n\n" not in data:
+                    data += b"\n"
+            else:
+                if not data or len(data) >= 65536:
+                    continue
+                if not data.endswith(b"\n"):
+                    data += b"\n"
+                if kind == "lfdot" and data.rstrip(b"\n").split(b"\n")[-1].startswith(b"."):
+                    data += b"end\n"
+            with open(path, "wb") as f:
+                f.write(data)
+    return dst
+
+
+class Runner:
+    def __init__(self, args):
+        work = os.path.abspath(args.work)
+        os.makedirs(work, exist_ok=True)
+        corpus = os.path.join(work, "corpus")
+        if not os.path.exists(corpus):
+            subprocess.run([sys.executable, os.path.join(HERE, "mkcorpus.py"), corpus], check=True)
+        self.home = os.path.join(corpus, "home")
+        self.cwd = os.path.join(corpus, "cwd")
+        self.side = {}
+        for d, binary, name, kind in (("a", args.a, args.name_a, args.corpus_a),
+                                      ("b", args.b, args.name_b, args.corpus_b)):
+            bindir = os.path.join(work, "bin-" + d)
+            shutil.rmtree(bindir, ignore_errors=True)
+            os.makedirs(bindir)
+            link = os.path.join(bindir, name)
+            os.symlink(os.path.abspath(binary), link)
+            self.side[d] = (link, os.path.join(make_variant(corpus, work, kind), "home"))
+        self.env = dict(os.environ, PATH=HERE + os.pathsep + os.environ["PATH"])
+        self.dump = args.dump
+        self.show = args.show
+        self.total = 0
+        self.mismatches = 0
+
+    def run(self, d, args, stdin):
+        link, home = self.side[d]
+        args = [x.replace(self.home, home) for x in args]
+        p = subprocess.run([link] + args, input=stdin, capture_output=True, cwd=self.cwd,
+                           env=dict(self.env, HOME=home), timeout=30)
+        norm = lambda b: b.replace(home.encode(), b"$HOME")
+        name = os.path.basename(link).encode()
+        err = re.sub(rb"(?m)^(PROG version) .*", rb"\1 VERSION", norm(p.stderr).replace(name, b"PROG"))
+        return (p.returncode, norm(p.stdout), err)
+
+    def check(self, args, stdin=b""):
+        self.total += 1
+        a = self.run("a", args, stdin)
+        b = self.run("b", args, stdin)
+        if a == b:
+            return
+        self.mismatches += 1
+        if self.dump:
+            latin1 = lambda r: [r[0], r[1].decode("latin1"), r[2].decode("latin1")]
+            record = {"args": [x.encode("utf-8", "surrogateescape").decode("latin1") for x in args],
+                      "a": latin1(a), "b": latin1(b)}
+            with open(self.dump, "a") as f:
+                f.write(json.dumps(record) + "\n")
+        if self.mismatches <= self.show:
+            print("MISMATCH:", args)
+            for k, (x, y) in enumerate(zip(a, b)):
+                if x != y:
+                    print("  " + ("exit", "stdout", "stderr")[k], "\n   A:", repr(x)[:400], "\n   B:", repr(y)[:400])
+
+
+def suite_base(r):
+    home = r.home
+    folders = [[], ["+inbox"], ["+rand"], ["+my\x07folder"], ["+a/b"], ["+empty"], ["+nonexist"],
+               [f"{home}/Mail/inbox"], ["~/Mail/inbox"], ["~"], ["~x"], ["+"], [""], ["-"], ["+inbox 1-5"],
+               ["+inbox", "3"], ["+inbox", "last:3"], ["+inbox", "-3"], ["+inbox", "10-"], ["+inbox", "2-12"],
+               ["+inbox", "last:-3"], ["+inbox", "0"], ["+inbox", "abc"], ["+rand", "last:200"], ["a", "b", "c"]]
+    optsets = [[], ["-l", "0"], ["-l", "2"], ["-l", "-1"], ["-c", "0"], ["-c", "3"], ["-c", "-1"],
+               ["-f", "Subject:,From:"], ["-f", "References:,Subject:"], ["-f", ""], ["-f", "Subject:,,From:"],
+               ["-f", "subject,References:,References:"], ["-x", ""], ["-x", ".txt"], ["-x", ".mew.mew"], ["-n"],
+               ["-b", "/nonexist"], ["-b", "~"], ["-b", "~/Mail"], ["-b", "~x"], ["-b", f"{home}/Mail"], ["-b", ""],
+               ["-w"]]
+    for f in folders:
+        for o in optsets:
+            r.check(o + f, b"\n" * 300)
+    for o in optsets:
+        r.check(o + ["-s", "+inbox 1-3", "-s", "+rand last:5"], b"\n" * 300)
+    for key in ["Subject:", "subject", "From:", "References:", "X-None:", "", "content-type", "Subj"]:
+        for f in folders[:6] + [["+inbox", "1-3"]]:
+            for o in [[], ["-l", "0"], ["-l", "1"], ["-f", "Subject:"]]:
+                r.check(o + ["-d", key] + f)
+    for args in [["-h"], ["-v"], ["-z"], ["--"], ["-ab"], ["-:"], ["-b"], ["-s", "+inbox", "+rand"], ["-s"],
+                 sum([["-s", "+inbox"]] * 17, []), sum([["-s", "+inbox 1"]] * 16, []), ["+inbox", "-a"],
+                 ["-a", "-a", "-p", "subject=hello", "+inbox"], ["-i", "nonexist"], ["-e", "nonexist-cmd", "+inbox"],
+                 ["-w", "-w", "+inbox"]]:
+        r.check(args, b"\n" * 300)
+    with open(os.path.join(r.cwd, "list1"), "rb") as f:
+        list1 = f.read()
+    for lst in ["list1", "list2", "list3", "-"]:
+        for f in [[], ["+inbox"], ["+nonexist"], ["+my\x07folder"], ["-s", "+rand", "-s", "+inbox"]]:
+            for o in [[], ["-x", ""], ["-d", "Subject:"], ["-p", "subject=e"], ["-a", "-p", "subject=e"], ["-w"]]:
+                r.check(o + ["-i", lst] + f, list1)
+    for f in [["+inbox"], [], ["+nonexist"]]:
+        for o in [[], ["-m", "a b  c"], ["-m", ""], ["-m", " ".join(str(i) for i in range(20))], ["-w"],
+                  ["-p", "head=foo"]]:
+            r.check(o + ["-e", "fake-inc"] + f, b"\n" * 100)
+            r.check(o + ["-e", os.path.join(HERE, "fake-inc")] + f, b"\n" * 100)
+    r.check(["-w", "+inbox"], b"\n\n")
+    r.check(["-w", "+inbox"], b"")
+
+
+def suite_mime(r):
+    values = ["日本語", "日本", "件名", "語", "の日本", "日本語の日本", "café", "CAFÉ", "Résumé", "résumé", "中文",
+              "한국", "Привет", "山田", "〜", "～", "①", "髙", "ไทย", "uro", "€uro", "plain ascii", "hi", "abc",
+              "a\tb", "ac", "a b", "Re:", "Re: 日本語", "text", "raw jis", "\udcff", "=?", "?=", "4", "の4", "tok",
+              "SPOOF", "marked", ""]
+    keys = ["subject", "Subject:", "subject:", "from", "From:", "message", "message-id", "x-mew", "x-mew-ref",
+            "date", "to", "token", "head", "Subj", "s"]
+    for k in keys:
+        for v in values:
+            for op in ["=", "=="]:
+                r.check(["-p", f'{k}{op}"{v}"', "+mime"])
+    for key in ["subject", "Subject:", "from", "message", "Message-ID:", "date", "Date:", "to", "x-mew", "token",
+                "X-Mew-Ref:"]:
+        for o in [[], ["-l", "0"]]:
+            r.check(o + ["-d", key, "+mime"])
+    for o in [[], ["-a"], ["-l", "0", "-a"]]:
+        r.check(o + ["-p", "subject=e | from=a", "+mime"])
+    r.check(["+mime"])
+    r.check(["-l", "0", "+mime"])
+
+
+UNI = ["Straße", "STRASSE", "strasse", "ss", "SS", "ß", "ẞ", "Ärger", "Ärger", "ärger", "ä", "̈",
+       "привет", "ПРИВЕТ", "οδυσσευς", "ΟΔΥΣΣΕΥΣ", "σ", "ς", "Σ", "istanbul", "İstanbul", "i̇", "ı", "I",
+       "file", "ﬁ", "FI", "kelvin", "K", "k", "ω", "Ω", "Ω", "abc", "ＡＢＣ", "ａｂｃ", "アイウ", "ｱｲｳ",
+       "日本語", "件名", "가", "가", "각", "ȩ́", "ȩ́", "ḉ", "ç",
+       "ǆ", "Ǆ", "dž", "ʼn", "ff", "ffi", "σίσυφος", "ὀδυσσεύς", "ⅻ", "Ⅻ", "xii", "🄰", "xy", "x‍y", "️",
+       "\udcdf", "\udcff"]
+
+
+def suite_uni(r):
+    for k in ["subject", "Subject:", "head", "from"]:
+        for v in UNI:
+            for op in ["=", "==", "!=", "!=="]:
+                r.check(["-p", f'{k}{op}"{v}"', "+uni"])
+    rnd = random.Random(7)
+    for _ in range(600):
+        v = "".join(rnd.choices(UNI, k=rnd.randint(1, 3)))
+        op = rnd.choice(["=", "=="])
+        r.check(["-p", f'subject{op}"{v}"', "+uni"])
+    r.check(["+uni"])
+    r.check(["-d", "subject:", "+uni"])
+
+
+TOKENS = ["subject", "from", "head", "references", "to", "x-foo", "=", "==", "!=", "!==", "!", "&", "&&", "|", "||",
+          "(", ")", "foo", "FOO", "bar", "\"a b\"", "\\(", "\"", "\\", " ", "<id@x>", "あ", "\udce3", "\udcff",
+          "\udc81x", "xあ", ".", "", "=foo", "subject=", "x", "\t"]
+
+
+def well_formed(rnd, depth=0):
+    """A pick pattern built by the grammar; with \\udcXX for raw bytes."""
+    x = rnd.random()
+    if depth > 3 or x < 0.4:
+        return (rnd.choice(["subject", "from", "head", "to", "references", "x-foo", "Subject:", "cc"])
+                + rnd.choice(["=", "==", "!=", "!=="])
+                + rnd.choice(["foo", "FOO", "bar", "\"a b\"", "e", "\"\"", "<id@x>", "x", ".", "あ", "xあ", "\udcff",
+                              "high", "\udce3\udc81\udc82", "\udc80"]))
+    if x < 0.55:
+        return "!" + well_formed(rnd, depth + 1)
+    if x < 0.7:
+        return "(" + well_formed(rnd, depth + 1) + ")"
+    return well_formed(rnd, depth + 1) + rnd.choice(["&", "|", " & ", "&&", "||", " | "]) + well_formed(rnd, depth + 1)
+
+
+def suite_fuzz(r, seed):
+    """Half well-formed, half random sequences of tokens."""
+    rnd = random.Random(seed)
+    for i in range(1500):
+        pat = well_formed(rnd) if i % 2 else "".join(rnd.choices(TOKENS, k=rnd.randint(0, 8)))
+        for f in [["+inbox"], ["+rand"]]:
+            o = rnd.choice([[], ["-a"], ["-a", "-l", "1"], ["-l", "0"], ["-a", "-c", "2", "-w"]])
+            r.check(o + ["-p", pat] + f, b"\n" * 300)
+
+
+def suite_wellformed(r):
+    for seed in range(3):
+        rnd = random.Random(seed)
+        for _ in range(1000):
+            r.check(["-p", well_formed(rnd), "+empty"])
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("a", help="mewl A")
+    p.add_argument("b", help="mewl B")
+    p.add_argument("--name-a", default="mewl", help="the name A is invoked as")
+    p.add_argument("--name-b", default="mewl", help="the name B is invoked as")
+    p.add_argument("--corpus-a", default="orig", choices=("orig", "lf", "lfdot", "clean"))
+    p.add_argument("--corpus-b", default="orig", choices=("orig", "lf", "lfdot", "clean"))
+    p.add_argument("--suite", default="base,mime,uni", help="comma-separated: " + ", ".join(SUITES))
+    p.add_argument("--seed", type=int, default=1, help="seed of the fuzzed patterns in base")
+    p.add_argument("--work", default=os.path.join(HERE, "work"), help="where the corpus is made")
+    p.add_argument("--dump", help="append the mismatches to this file as JSON lines")
+    p.add_argument("--show", type=int, default=10, help="how many mismatches to print")
+    args = p.parse_args()
+    suites = args.suite.split(",")
+    for s in suites:
+        if s not in SUITES:
+            p.error(f"unknown suite: {s}")
+
+    r = Runner(args)
+    for name, fn in (("base", suite_base), ("mime", suite_mime), ("uni", suite_uni),
+                     ("wellformed", suite_wellformed)):
+        if name in suites:
+            before = (r.total, r.mismatches)
+            fn(r)
+            print(f"{name}: {r.total - before[0]} run, {r.mismatches - before[1]} mismatches")
+    if "base" in suites:
+        before = (r.total, r.mismatches)
+        suite_fuzz(r, args.seed)
+        print(f"base (fuzzed patterns): {r.total - before[0]} run, {r.mismatches - before[1]} mismatches")
+    print(f"TOTAL: {r.total} run, {r.mismatches} mismatches")
+
+
+if __name__ == "__main__":
+    main()
