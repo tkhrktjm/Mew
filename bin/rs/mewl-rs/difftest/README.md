@@ -115,6 +115,9 @@ commit after main). The commands are run in this directory.
 | | `./difftest.py --suite utf7 C-868ed6f rs/10 --name-b mewl-rs-compat` | 471 run, 0 mismatches |
 | | `./difftest.py rs/9 rs/10 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 196 mismatches: 12 in `+mime`, 184 in `+utf7` |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 240 mismatches: 20 in `+mime`, 220 in `+utf7` |
+| 11. convert UTF-7 as the RFCs specify in mewl-rs | `./difftest.py rs/10 rs/11 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 122 mismatches, all in `+utf7` |
+| | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
 
 mewl-rs-compat changes only in steps 4 and 8, which follow main, and
 in step 10, which decodes UTF-7; in the other steps it is the same as

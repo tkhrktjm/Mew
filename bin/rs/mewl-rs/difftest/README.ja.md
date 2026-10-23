@@ -118,6 +118,9 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | `./difftest.py --suite utf7 C-868ed6f rs/10 --name-b mewl-rs-compat` | 471 run, 0 mismatches |
 | | `./difftest.py rs/9 rs/10 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 196 mismatches: `+mime` で 12、`+utf7` で 184 |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 240 mismatches: `+mime` で 20、`+utf7` で 220 |
+| 11. convert UTF-7 as the RFCs specify in mewl-rs | `./difftest.py rs/10 rs/11 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 122 mismatches、すべて `+utf7` |
+| | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
 
 mewl-rs-compat が変わるのは、main に従う手順 4 と 8、UTF-7 を復号する
 手順 10 だけである。それ以外の手順では前と同じで、たとえば、ともに
