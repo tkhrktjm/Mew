@@ -27,6 +27,7 @@ mod pattern;
 mod printer;
 mod source;
 mod sys;
+mod unicode;
 
 use std::env;
 use std::fs::File;

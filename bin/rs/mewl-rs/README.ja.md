@@ -40,9 +40,6 @@ Mew のメッセージ・スキャナ `mewl` を Rust に移植したもの。
   その間で分割されたマルチバイト文字も元に戻る。
 - 昔の日本のメーラが符号化せずに書いた、ヘッダ中の生の ISO-2022-JP を
   UTF-8 に変換する。
-- UTF-8 の値は大文字小文字を区別せずに一致する (`key=val`)。glibc 上の
-  `mewl` は、0x80 以上のバイトで始まる値に大文字小文字を区別せずに一致する
-  ことがないので、`subject=日本語` は何も見つけない。
 
 `mewl` のバグもいくつか直してある:
 
@@ -84,16 +81,26 @@ Mew の変更を要するバグは直していない。たとえば、Mew は `m
 ## mewl-rs-compat
 
 `mewl-rs-compat`、または `mewl-rs` 以外の名前で起動すると、入力、出力、
-オプションは `mewl` と同じである (`mewl(1)` を参照)。iconv 付きで
-ビルドした `mewl` と同じく、pick (`-p key=val`) では、フィールド本体中の
-RFC 2047 の encoded-word を UTF-8 に復号する。
+オプションは `mewl` と同じである (`mewl(1)` を参照)。iconv と utf8proc
+付きで (ただし `--enable-utf8proc-char-fold` なしで) ビルドした `mewl` と
+同じく、pick (`-p key=val`) では:
 
-charset の変換は iconv ではなく encoding_rs (Encoding Standard) によるので、
-`mewl` と結果が異なる場合が少しある:
+- フィールド本体中の RFC 2047 の encoded-word を UTF-8 に復号する。
+- `=` と `!=` は、フィールド本体と値を、Unicode の完全な case folding と
+  正準合成 (NFC) の後で比べるので、"Straße" は "STRASSE" に一致する。
+  `==` と `!==` は NFC の後だけで比べる。幅は畳み込まない。どちらかが
+  正しい UTF-8 でなければ、ASCII 文字の大文字小文字だけを区別せずに
+  バイトごとに比べる。キー `head` はそのまま比べる。
+
+charset の変換は iconv ではなく encoding_rs (Encoding Standard) により、
+Unicode の正規化は utf8proc ではなく unicode-normalization と caseless に
+よるので、`mewl` と結果が異なる場合が少しある:
 
 - Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
 - Encoding Standard が知らない charset、たとえば UTF-7 の encoded-word は
   復号しない。
+- どちらかがまだ知らない新しい版の Unicode の文字は、正規化の結果が
+  異なることがある。
 
 ほかにも `mewl` と異なる点が 2 つあるが、Mew はどちらにも依存していない:
 

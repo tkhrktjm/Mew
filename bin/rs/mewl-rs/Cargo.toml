@@ -1,6 +1,6 @@
 [package]
 name = "mewl-rs"
-version = "0.1.0"
+version = "0.2.0"
 rust-version = "1.88"
 edition = "2024"
 description = "Message scanner for Mew 4 or later (Rust port of mewl)"
@@ -11,8 +11,10 @@ name = "mewl-rs"
 path = "src/main.rs"
 
 [dependencies]
+caseless = "0.2.2"
 encoding_rs = "0.8.42"
 libc = "0.2"
+unicode-normalization = "0.1.26"
 
 [profile.release]
 opt-level = 3
