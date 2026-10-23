@@ -44,6 +44,13 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   so that a multibyte character split between them is restored.
 - Raw ISO-2022-JP in a header, which old Japanese mailers wrote
   without encoding, is converted to UTF-8.
+- An invalid byte sequence in the charset of an encoded-word, or in
+  raw ISO-2022-JP, is replaced with U+FFFD (REPLACEMENT CHARACTER),
+  one for each maximal subpart as the Encoding Standard does, while
+  `mewl` keeps the bytes as they are. So a decoded value is always
+  UTF-8, and a field with a broken character is still matched with
+  case folding and NFC rather than byte by byte. Raw 8-bit text which
+  is not encoded is left as it is, since its charset is unknown.
 - UTF-7 and UTF-7-IMAP are converted as RFC 2152 and RFC 3501
   specify, not as glibc does. A shifted sequence (from `+`, or `&`, to
   the end of its base64) is decoded only if it is well-formed as a
@@ -52,8 +59,8 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   printable US-ASCII, and does not follow another one right away.
   Otherwise it is kept as it is, so that what is shown is either the
   text or what was sent, never characters made of a broken sequence.
-  A character which may not stand for itself, such as `~` in UTF-7, is
-  kept as well.
+  A US-ASCII character which may not stand for itself, such as `~` in
+  UTF-7, is kept as well; a byte not in US-ASCII is U+FFFD.
 
 It also fixes some bugs of `mewl`:
 

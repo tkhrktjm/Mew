@@ -121,6 +121,8 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | 11. convert UTF-7 as the RFCs specify in mewl-rs | `./difftest.py rs/10 rs/11 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 122 mismatches、すべて `+utf7` |
 | | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
+| 12. replace invalid sequences with U+FFFD in mewl-rs | `./difftest.py rs/11 rs/12 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 20 mismatches: 不正なバイトを含むメッセージ +mime/26 と +utf7/20 |
 
 mewl-rs-compat が変わるのは、main に従う手順 4 と 8、UTF-7 を復号する
 手順 10 だけである。それ以外の手順では前と同じで、たとえば、ともに

@@ -118,6 +118,8 @@ commit after main). The commands are run in this directory.
 | 11. convert UTF-7 as the RFCs specify in mewl-rs | `./difftest.py rs/10 rs/11 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 122 mismatches, all in `+utf7` |
 | | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
+| 12. replace invalid sequences with U+FFFD in mewl-rs | `./difftest.py rs/11 rs/12 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 20 mismatches: +mime/26 and +utf7/20, the messages with an invalid byte |
 
 mewl-rs-compat changes only in steps 4 and 8, which follow main, and
 in step 10, which decodes UTF-7; in the other steps it is the same as

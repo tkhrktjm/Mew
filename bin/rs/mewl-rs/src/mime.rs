@@ -24,8 +24,10 @@
 //!   be an error.
 //! - Raw ISO-2022-JP, which old Japanese mailers put in headers without
 //!   encoding, is converted.
+//! - An invalid byte sequence in a charset is replaced with U+FFFD, as
+//!   the Encoding Standard does, so that the output is UTF-8.
 //! - UTF-7 is converted as the RFCs specify, not as glibc does: an
-//!   invalid shifted sequence is kept as a whole.
+//!   invalid shifted sequence, which is US-ASCII, is kept as a whole.
 //!
 //! Otherwise it is the same as [`decode_field`].
 
@@ -200,9 +202,15 @@ impl Charset {
     }
 
     /// Converts `input` to UTF-8, UTF-7 by `rules`. With `keep_invalid`,
-    /// an invalid byte sequence is kept as it is; otherwise it fails.
+    /// an invalid byte sequence is kept as it is by [`Rules::Glibc`], as
+    /// mewl does, and replaced with U+FFFD by [`Rules::Rfc`] but an
+    /// invalid sequence of UTF-7 in US-ASCII; otherwise it fails.
     fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
         match self {
+            Charset::Encoding(encoding) if keep_invalid && rules == Rules::Rfc => {
+                let (text, _) = encoding.decode_without_bom_handling(input);
+                Some(text.into_owned().into_bytes())
+            }
             Charset::Encoding(encoding) => convert(encoding, input, keep_invalid),
             Charset::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
         }
@@ -422,6 +430,13 @@ mod tests {
         /* UTF-7 as the RFCs specify. */
         assert_eq!(decode_utf8("=?UTF-7?Q?+ZeVnLIqe-?="), "日本語");
         assert_eq!(decode_utf8("=?UTF-7?Q?+ZeV-?= =?UTF-7?Q?a+ZeU-?="), "+ZeV-a日");
+        /* An invalid sequence is replaced with U+FFFD. */
+        assert_eq!(decode_utf8("=?UTF-8?B?/2Fi?="), "\u{fffd}ab");
+        assert_eq!(decode_utf8("=?UTF-8?B?5pel5g?="), "日\u{fffd}");
+        assert_eq!(decode_utf8("=?UTF-8?B?5pdB?="), "\u{fffd}A");
+        assert_eq!(decode_utf8("=?Shift_JIS?B?k/qW?="), "日\u{fffd}");
+        assert_eq!(decode_utf8("=?UTF-7?Q?a=E9?="), "a\u{fffd}");
+        assert_eq!(decode_utf8("a\x1b$BF\x1b(B"), "a\u{fffd}");
     }
 
     #[test]
