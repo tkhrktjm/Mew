@@ -9342,7 +9342,7 @@ separate them with ",". You can also use a wildcard "*".
 @samp{?} と @samp{/} で @samp{subject=...} のような条件式を入力すると
 @samp{mewl} が呼ばれます。@samp{mewl} が iconv を使えるようにビルドされて
 いれば、ヘッダの RFC 2047 の符号化を解いてから比較するので、Subject: や
-From: などの日本語も見つかります(@samp{head=} は除きます)。utf8proc も使
+From: などの日本語も見つかります(@samp{head=} でも同様です)。utf8proc も使
 えるなら、大文字小文字や、合成済みの文字と分解された文字の違いを Unicode
 の規則で吸収します。詳しくは、@xref{condition} を参照して下さい。ただし、本文は
 符号化されたまま検索するので、本文の非 ASCII の文字列は見つかりません。文字
@@ -9356,8 +9356,8 @@ From: などの日本語も見つかります(@samp{head=} は除きます)。ut
 With an expression such as @samp{subject=...}, @samp{?} and @samp{/}
 call @samp{mewl}. If @samp{mewl} is built with iconv, it decodes the
 encoded-words of RFC 2047 in a header before matching, so a non-ASCII
-string in Subject:, From: and so on can be found (except with
-@samp{head=}). If it is built with utf8proc as well, differences in
+string in Subject:, From: and so on can be found (with @samp{head=}
+too). If it is built with utf8proc as well, differences in
 case and between precomposed and decomposed characters are settled by
 the Unicode rules; see @ref{condition}. A body is read as it is, so a
 non-ASCII string in a
