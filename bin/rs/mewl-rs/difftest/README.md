@@ -27,7 +27,7 @@ The C mewl of a revision, with iconv and, if installed, utf8proc
 (libutf8proc-dev on Debian; the mewl of main uses it when found):
 
 ```
-% mkdir /tmp/c && git archive 868ed6f | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive 464013a | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
 
@@ -73,7 +73,7 @@ binary, to tell the effects of fixes apart:
 
 ## Expected results
 
-Against the C mewl of 868ed6f built with iconv and utf8proc 2.10
+Against the C mewl of 464013a built with iconv and utf8proc 2.10
 (without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 12
 of the 7320 cases, all in the `mime` suite and for one reason:
 charsets are converted by encoding_rs, not by iconv, so 0x8160 of
@@ -120,8 +120,11 @@ commit after main). The commands are run in this directory.
 | | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
 | 12. replace invalid sequences with U+FFFD in mewl-rs | `./difftest.py rs/11 rs/12 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 20 mismatches: +mime/26 and +utf7/20, the messages with an invalid byte |
+| 14. follow main in reading no data left by the previous message | `./difftest.py C-464013a rs/14 --name-b mewl-rs-compat`, also with `--corpus-a lf --corpus-b lf` | 7320 run, 12 mismatches |
+| | `./difftest.py rs/13 rs/14 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 182 mismatches, as many as between C-868ed6f and C-464013a: +inbox/10 (empty) and +inbox/23 (`Subj`) |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7320 run, 0 mismatches |
 
-mewl-rs-compat changes only in steps 4 and 8, which follow main, and
-in step 10, which decodes UTF-7; in the other steps it is the same as
-before, e.g. 0 mismatches between rs/6 and rs/7 both invoked as
+mewl-rs-compat changes only in steps 4, 8, and 14, which follow main,
+and in step 10, which decodes UTF-7; in the other steps it is the same
+as before, e.g. 0 mismatches between rs/6 and rs/7 both invoked as
 mewl-rs-compat.

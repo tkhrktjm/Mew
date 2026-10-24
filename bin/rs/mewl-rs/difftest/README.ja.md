@@ -28,7 +28,7 @@ mewl-rs には独自のバージョンがあるので、`-v` が表示するバ�
 これを使う):
 
 ```
-% mkdir /tmp/c && git archive 868ed6f | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive 464013a | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
 
@@ -74,7 +74,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 ## 期待される結果
 
 iconv と utf8proc 2.10 付きで (`--enable-utf8proc-char-fold` なしで)
-ビルドした 868ed6f の C 版 mewl に対して、mewl-rs-compat は 7320 ケース
+ビルドした 464013a の C 版 mewl に対して、mewl-rs-compat は 7320 ケース
 中 12 ケースで異なる。どれも `mime` スイートにあり、理由は一つである。
 charset は iconv ではなく encoding_rs で変換するので、Shift_JIS の 0x8160
 ("〜") は U+301C ではなく U+FF5E になる。
@@ -123,7 +123,10 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | `./difftest.py C-868ed6f rs/11 --name-b mewl-rs-compat` | 7320 run, 12 mismatches |
 | 12. replace invalid sequences with U+FFFD in mewl-rs | `./difftest.py rs/11 rs/12 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 20 mismatches: 不正なバイトを含むメッセージ +mime/26 と +utf7/20 |
+| 14. follow main in reading no data left by the previous message | `./difftest.py C-464013a rs/14 --name-b mewl-rs-compat`、`--corpus-a lf --corpus-b lf` 付きでも | 7320 run, 12 mismatches |
+| | `./difftest.py rs/13 rs/14 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7320 run, 182 mismatches、C-868ed6f と C-464013a の間と同数: +inbox/10 (空) と +inbox/23 (`Subj`) |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7320 run, 0 mismatches |
 
-mewl-rs-compat が変わるのは、main に従う手順 4 と 8、UTF-7 を復号する
+mewl-rs-compat が変わるのは、main に従う手順 4、8、14 と、UTF-7 を復号する
 手順 10 だけである。それ以外の手順では前と同じで、たとえば、ともに
 mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は 0 である。
