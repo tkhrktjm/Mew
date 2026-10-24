@@ -217,12 +217,13 @@ fn no_data_left_by_the_previous_message() {
     f.write("b/1", b"Subject: stale-data\n\n");
     f.write("b/2", b"");
     f.write("b/3", b"Subj");
-    /* head= of an empty message */
-    assert_eq!(f.run("mewl-rs", &["-p", "head=stale", "+b"]), "1\n");
-    assert_eq!(f.run("mewl-rs-compat", &["-p", "head=stale", "+b"]), "1\n2\n");
-    /* a field name completed by what is left */
-    assert!(f.run("mewl-rs", &["-f", "Subject:", "+b", "1-3"]).ends_with("Filename: 3\n\n.\n"));
-    assert!(f.run("mewl-rs-compat", &["-f", "Subject:", "+b", "1-3"]).ends_with("Filename: 3\nSub\n\n.\n"));
+    /* Neither reads it, as mewl does not since it ends what it reads
+    with NUL: head= of an empty message, and a field name which what
+    is left would complete. */
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run(name, &["-p", "head=stale", "+b"]), "1\n");
+        assert!(f.run(name, &["-f", "Subject:", "+b", "1-3"]).ends_with("Filename: 3\n\n.\n"));
+    }
 }
 
 #[test]

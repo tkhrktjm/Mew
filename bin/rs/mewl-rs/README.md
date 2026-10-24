@@ -75,9 +75,6 @@ It also fixes some bugs of `mewl`:
   or `abc`, is an error ("broken pattern."), while `mewl` silently
   evaluates its first part. A word followed by `=` is the key of
   another comparison, not a part of the value.
-- Nothing beyond a message is read. `mewl` reads what the previous
-  message left in its buffer, so an empty message may match
-  `head=val`, and a short message may show a field which it lacks.
 - A message beginning with an empty line has an empty header. `mewl`
   takes its body for the header.
 - A line with NUL in the list of `-i` does not hide the next line.

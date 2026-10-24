@@ -1,16 +1,13 @@
 //! Reading a message and finding fields in its header.
 //!
 //! Only the first [`MAX_HEADER`] bytes of a message are read into a
-//! buffer which is reused for all messages, as mewl does. The scanning
-//! below keeps two side effects of mewl since they show up in the
-//! output:
+//! buffer, as mewl does. The scanning below keeps a side effect of mewl
+//! since it shows up in the output: reaching the end of the data
+//! overwrites its last byte with LF. So positions are indices into the
+//! buffer, as pointers in mewl, and the order of comparing and skipping
+//! a field is kept.
 //!
-//! - Reaching the end of the data overwrites its last byte with LF.
-//! - Comparing a field name for scan may look beyond the data into what
-//!   the previous message left in the buffer.
-//!
-//! So positions are indices into the buffer, as pointers in mewl, and
-//! the order of comparing and skipping a field is kept.
+//! mewl ends what it reads with NUL, so nothing beyond the data is read.
 
 mod fields;
 
@@ -85,10 +82,9 @@ impl Header {
         self.buf.get(range).unwrap_or_default()
     }
 
-    /// What may be read. mewl reads beyond the data into what the
-    /// previous message left in the buffer.
-    fn readable(&self) -> &[u8] {
-        if self.flavor.fixes_bugs() { &self.buf[..self.len] } else { &self.buf }
+    /// The data read.
+    fn data(&self) -> &[u8] {
+        &self.buf[..self.len]
     }
 
     /// Whether the header is empty, the message beginning with an
@@ -99,7 +95,7 @@ impl Header {
 
     /// `strncasecmp(name, &buf[pos], strlen(name)) == 0`.
     fn has_name_at(&self, pos: usize, name: &[u8]) -> bool {
-        self.readable()
+        self.data()
             .get(pos..pos + name.len())
             .is_some_and(|s| s.eq_ignore_ascii_case(name))
     }
@@ -153,29 +149,27 @@ impl Header {
         }
     }
 
-    /// The position of the empty line ending the header, or of the
-    /// last byte. `None` if there is no data.
-    fn end_of_header(&self) -> Option<usize> {
+    /// The position of the empty line ending the header, or the end of
+    /// the data.
+    fn end_of_header(&self) -> usize {
         if self.has_empty_header() {
-            return Some(0);
+            return 0;
         }
-        let data = &self.buf[..self.len];
-        match data.windows(2).position(|w| w == b"\n\n") {
-            Some(i) => Some(i + 1),
-            None => self.len.checked_sub(1),
+        match self.data().windows(2).position(|w| w == b"\n\n") {
+            Some(i) => i + 1,
+            None => self.len,
         }
     }
 
     /// The C string beginning at `beg` when NUL is put at `nul` for a
-    /// while. Without `nul` after `beg`, it may extend beyond the data
-    /// (see [`Header::readable`]).
+    /// while. Without `nul` after `beg`, it ends at the end of the data.
     fn c_str(&self, beg: usize, nul: Option<usize>) -> &[u8] {
-        let readable = self.readable();
+        let data = self.data();
         let end = match nul {
-            Some(nul) if nul >= beg => nul.min(readable.len()),
-            _ => readable.len(),
+            Some(nul) if nul >= beg => nul.min(data.len()),
+            _ => data.len(),
         };
-        let s = readable.get(beg..end).unwrap_or_default();
+        let s = data.get(beg..end).unwrap_or_default();
         s.split(|&c| c == 0).next().unwrap_or_default()
     }
 
@@ -274,7 +268,7 @@ impl Header {
         if key == WHOLE_HEADER {
             /* neither decoded (by mewl) nor normalized */
             let case = if case_sensitive { Case::Sensitive } else { Case::Ignore };
-            let header = self.c_str(0, self.end_of_header());
+            let header = self.c_str(0, Some(self.end_of_header()));
             return self.flavor.whole_header(header).contains_bytes(value, case);
         }
 
