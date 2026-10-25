@@ -46,6 +46,14 @@ difftest/README.ja.md を参照。
   その間で分割されたマルチバイト文字も元に戻る。
 - 昔の日本のメーラが符号化せずに書いた、ヘッダ中の生の ISO-2022-JP を
   UTF-8 に変換する。
+- ISO-2022-JP は、charset の名前にかかわらず、ISO-2022-JP-2 (RFC 1554)
+  のすべての文字集合を知っている。どの文字集合が続くかはエスケープ
+  シーケンスが示すからである: 一部の User-Agent の "Gojō" のような
+  JIS X 0212、GB 2312、KS C 5601、`ESC N` による ISO 8859-1 と 8859-7。
+  ISO-2022-JP-1 (RFC 2237) も知っている。JIS X 0208 は "①" のような
+  Windows の拡張を持つ。知らないエスケープシーケンス、たとえば
+  ISO-2022-JP-3 の JIS X 0213 のものは読み飛ばし、その文字集合の文字は
+  U+FFFD になる。
 - encoded-word の charset や生の ISO-2022-JP で不正なバイト列は、
   Encoding Standard と同じく最大部分ごとに一つずつ U+FFFD (REPLACEMENT
   CHARACTER) に置き換える。`mewl` はそのバイトのまま残す。そのため、
@@ -113,14 +121,19 @@ Mew の変更を要するバグは直していない。たとえば、Mew は `m
   バイトごとに比べる。キー `head` はそのまま比べる。
 
 charset の変換は iconv ではなく encoding_rs (Encoding Standard) による。
-ただし Encoding Standard が知らない UTF-7 と UTF-7-IMAP は、不正な並びも
-含めて glibc と同じように変換する。Unicode の正規化は utf8proc ではなく
+ただし ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、不正な並びと
+glibc の表も含めて glibc と同じように変換し、このうち ISO-2022-JP だけを
+Windows の表で定義する Encoding Standard には従わない。
+たとえば "①" は ISO-2022-JP にはなく、glibc にない ISO-2022-JP-1 は
+復号しない。Unicode の正規化は utf8proc ではなく
 unicode-normalization と caseless による。そのため、`mewl` と結果が
 異なる場合が少しある:
 
 - Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
 - Encoding Standard が知らず UTF-7 でもない charset、たとえば UTF-32 の
   encoded-word は復号しない。
+- ISO-2022-JP-3 は ISO-2022-JP として変換し、glibc が知っている
+  JIS X 0213 と JIS X 0201 のカタカナは扱わない。
 - UTF-7 中の対にならない下位サロゲートは、それを補う文字を不正にする。
   glibc はこれを変換の次の段階に渡し、そこで iconv の内部に依存する形で
   拒否される。

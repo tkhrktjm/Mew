@@ -57,14 +57,7 @@
 //! a byte not in US-ASCII is replaced with U+FFFD, so that the output
 //! is UTF-8. Decoding goes on after it from the initial state.
 
-/// How an invalid sequence is found and what follows it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Rules {
-    /// As the iconv of glibc does for mewl.
-    Glibc,
-    /// As the RFCs specify.
-    Rfc,
-}
+use crate::mime::Rules;
 
 /// The two variants iconv knows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

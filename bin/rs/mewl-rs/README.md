@@ -44,6 +44,14 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   so that a multibyte character split between them is restored.
 - Raw ISO-2022-JP in a header, which old Japanese mailers wrote
   without encoding, is converted to UTF-8.
+- ISO-2022-JP knows every set of ISO-2022-JP-2 (RFC 1554) whatever
+  the charset is named, since an escape sequence tells which set
+  follows: JIS X 0212 as in "Gojō" of some User-Agent, GB 2312, KS C
+  5601, and ISO 8859-1 and 8859-7 by `ESC N`. ISO-2022-JP-1 (RFC 2237)
+  is known too. JIS X 0208 has the extensions of Windows, such as
+  "①". An escape sequence not known, e.g. of JIS X 0213 in
+  ISO-2022-JP-3, is skipped, and the characters of its set are
+  U+FFFD.
 - An invalid byte sequence in the charset of an encoded-word, or in
   raw ISO-2022-JP, is replaced with U+FFFD (REPLACEMENT CHARACTER),
   one for each maximal subpart as the Encoding Standard does, while
@@ -116,14 +124,19 @@ output, and options are the same as `mewl`'s (see `mewl(1)`). As
   compared as it is.
 
 Charsets are converted by encoding_rs (the Encoding Standard), not by
-iconv; UTF-7 and UTF-7-IMAP, which the Encoding Standard does not
-know, are converted as glibc does, invalid sequences included. Unicode
+iconv; ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted
+as glibc does, invalid sequences and the tables of glibc included, not
+as the Encoding Standard, which knows only ISO-2022-JP, with the table
+of Windows: e.g. "①" is not in ISO-2022-JP, and ISO-2022-JP-1, which
+glibc lacks, is not decoded. Unicode
 is normalized by unicode-normalization and caseless, not by utf8proc.
 So a few results differ from `mewl`'s:
 
 - 0x8160 of Shift_JIS ("〜") is U+FF5E, while glibc gives U+301C.
 - An encoded-word in a charset unknown to the Encoding Standard and
   not UTF-7, such as UTF-32, is not decoded.
+- ISO-2022-JP-3 is converted as ISO-2022-JP, without JIS X 0213 and
+  the Katakana of JIS X 0201, which glibc knows.
 - A lone low surrogate in UTF-7 makes the character completing it
   invalid, while glibc passes it to the next step of the conversion,
   which refuses it in a way that depends on the internals of iconv.
