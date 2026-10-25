@@ -27,7 +27,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 2
+VERSION = 3
 
 
 def w(path, data):
@@ -179,6 +179,41 @@ def make_utf7(mail):
         w(f"{mail}/{i}", b"Subject: " + b + b"\nX-Q: " + q + b"\nFrom: x@example.com\n\nbody\n")
 
 
+def make_iso2022jp(mail):
+    """iso2022jp: encoded-words in ISO-2022-JP and its variants, and raw
+    ISO-2022-JP in a header."""
+    mail = os.path.join(mail, "iso2022jp")
+    os.makedirs(mail, exist_ok=True)
+    esc = {"ascii": b"\x1b(B", "roman": b"\x1b(J", "kana": b"\x1b(I", "jis78": b"\x1b$@", "jis": b"\x1b$B",
+           "gb": b"\x1b$A", "ksc": b"\x1b$(C", "x0212": b"\x1b$(D", "latin": b"\x1b.A", "greek": b"\x1b.F",
+           "ss2": b"\x1bN", "x0213": b"\x1b$(Q"}
+    a = esc["ascii"]
+    texts = [
+        ("ISO-2022-JP", esc["jis"] + b"F|K\\8l" + a), ("iso-2022-jp", b"Re: " + esc["jis"] + b"F|K\\" + a + b" (1)"),
+        ("ISO-2022-JP", esc["jis78"] + b"F|" + esc["roman"] + b"\\~" + a + b"\\~"),
+        ("ISO-2022-JP", esc["jis"] + b"!A!B!]!q!r\"L" + a), ("ISO-2022-JP", esc["jis"] + b"-!-\"-5" + a),
+        ("ISO-2022-JP", esc["jis"] + b"y!|q" + a), ("ISO-2022-JP", b"Goj" + esc["x0212"] + b"+W" + a),
+        ("ISO-2022-JP", esc["kana"] + b"12" + a), ("ISO-2022-JP", esc["jis"] + b"F|\xffK\\" + a),
+        ("ISO-2022-JP", esc["jis"] + b"F|K"), ("ISO-2022-JP", b"a" + esc["jis"][:2]), ("ISO-2022-JP", b"a\x1bZb"),
+        ("ISO-2022-JP", esc["jis"] + b"F| K\\\tF|" + a), ("ISO-2022-JP-1", b"Goj" + esc["x0212"] + b"+W" + a),
+        ("ISO-2022-JP-2", b"Goj" + esc["x0212"] + b"+W" + a), ("iso-2022-jp-2", esc["gb"] + b"VPND!$!*" + a),
+        ("ISO-2022-JP-2", esc["ksc"] + b"GQ19\"h" + a), ("ISO-2022-JP-2", esc["gb"] + b"*!x!" + a),
+        ("ISO-2022-JP-2", esc["latin"] + b"caf" + esc["ss2"] + b"i " + esc["greek"] + esc["ss2"] + b"a" + esc["ss2"] + b"2"),
+        ("ISO-2022-JP-2", esc["ss2"] + b"a"), ("ISO-2022-JP-2", esc["kana"] + b"1`" + a),
+        ("ISO-2022-JP-2", esc["jis"] + b"-!" + a), ("ISO-2022-JP-3", esc["jis"] + b"F|" + esc["x0213"] + b".!" + a),
+        ("csISO2022JP", esc["jis"] + b"F|" + a), ("ISO2022JP2", esc["x0212"] + b"+W" + a),
+    ]
+    for i, (charset, text) in enumerate(texts, 1):
+        b = b"=?" + charset.encode() + b"?B?" + base64.b64encode(text) + b"?="
+        q = b"=?" + charset.encode() + b"?Q?" + b"".join(
+            b"=%02X" % c if c > 126 or c < 33 or c in b"=?_" else bytes([c]) for c in text) + b"?="
+        w(f"{mail}/{i}", b"Subject: " + b + b"\nX-Q: " + q + b"\nFrom: x@example.com\n\nbody\n")
+    raw = [b"FLIM/1.14.9 (Goj" + esc["x0212"] + b"+W" + a + b")", b"a " + esc["jis"] + b"F|K\\" + a + b" b",
+           esc["gb"] + b"VPND" + a, esc["jis"] + b"-!" + a, b"x " + esc["x0213"] + b".!" + a + b" y"]
+    for i, text in enumerate(raw, len(texts) + 1):
+        w(f"{mail}/{i}", b"Subject: raw\nUser-Agent: " + text + b"\nFrom: x@example.com\n\nbody\n")
+
+
 def make_lists(cwd):
     """The lists for -i. list2 has a long line and a line with NUL."""
     os.makedirs(cwd, exist_ok=True)
@@ -196,6 +231,7 @@ def main():
     make_mime(mail)
     make_uni(mail)
     make_utf7(mail)
+    make_iso2022jp(mail)
     make_lists(os.path.join(root, "cwd"))
     w(os.path.join(root, "VERSION"), b"%d\n" % VERSION)
 

@@ -47,7 +47,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SUITES = ("base", "mime", "uni", "utf7", "wellformed")
+SUITES = ("base", "mime", "uni", "utf7", "iso2022jp", "wellformed")
 
 
 def make_variant(corpus, work, kind):
@@ -256,6 +256,18 @@ def suite_utf7(r):
     r.check(["-d", "x-q", "+utf7"])
 
 
+def suite_iso2022jp(r):
+    values = ["日本語", "日本", "日", "Re: 日本 (1)", "¥‾", "\\~", "〜", "～", "‖", "∥", "①", "-!", "Gojō", "Goj", "$(D+W",
+              "中文", "・", "·", "한국", "㉾", "ｱｲ", "café", "α", "β", "F|", "\udcff", ".!", "日 本", "a", "b", ""]
+    for k in ["subject", "x-q", "user-agent", "head"]:
+        for v in values:
+            for op in ["=", "=="]:
+                r.check(["-p", f'{k}{op}"{v}"', "+iso2022jp"])
+    r.check(["+iso2022jp"])
+    for k in ["subject:", "x-q", "user-agent"]:
+        r.check(["-d", k, "+iso2022jp"])
+
+
 TOKENS = ["subject", "from", "head", "references", "to", "x-foo", "=", "==", "!=", "!==", "!", "&", "&&", "|", "||",
           "(", ")", "foo", "FOO", "bar", "\"a b\"", "\\(", "\"", "\\", " ", "<id@x>", "あ", "\udce3", "\udcff",
           "\udc81x", "xあ", ".", "", "=foo", "subject=", "x", "\t"]
@@ -301,7 +313,7 @@ def main():
     p.add_argument("--name-b", default="mewl", help="the name B is invoked as")
     p.add_argument("--corpus-a", default="orig", choices=("orig", "lf", "lfdot", "clean"))
     p.add_argument("--corpus-b", default="orig", choices=("orig", "lf", "lfdot", "clean"))
-    p.add_argument("--suite", default="base,mime,uni,utf7", help="comma-separated: " + ", ".join(SUITES))
+    p.add_argument("--suite", default="base,mime,uni,utf7,iso2022jp", help="comma-separated: " + ", ".join(SUITES))
     p.add_argument("--seed", type=int, default=1, help="seed of the fuzzed patterns in base")
     p.add_argument("--work", default=os.path.join(HERE, "work"), help="where the corpus is made")
     p.add_argument("--dump", help="append the mismatches to this file as JSON lines")
@@ -314,7 +326,7 @@ def main():
 
     r = Runner(args)
     for name, fn in (("base", suite_base), ("mime", suite_mime), ("uni", suite_uni), ("utf7", suite_utf7),
-                     ("wellformed", suite_wellformed)):
+                     ("iso2022jp", suite_iso2022jp), ("wellformed", suite_wellformed)):
         if name in suites:
             before = (r.total, r.mismatches)
             fn(r)

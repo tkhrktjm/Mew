@@ -21,6 +21,7 @@ mod error;
 mod flavor;
 mod folder;
 mod header;
+mod iso2022jp;
 mod mime;
 mod output;
 mod pattern;

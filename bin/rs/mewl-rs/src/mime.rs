@@ -10,7 +10,8 @@
 //! mewl converts charsets with iconv while this uses encoding_rs (the
 //! Encoding Standard), so a few characters may be converted
 //! differently, e.g. 0x8160 of Shift_JIS is U+301C by glibc but U+FF5E
-//! here. UTF-7, unknown to the Encoding Standard, is converted by
+//! here. ISO-2022-JP and ISO-2022-JP-2 are converted by
+//! [`crate::iso2022jp`] and UTF-7, unknown to the Encoding Standard, by
 //! [`crate::utf7`] as glibc does.
 //!
 //! [`decode_text`] is for `mewl-rs` (not `mewl-rs-compat`) and more
@@ -24,6 +25,8 @@
 //!   be an error.
 //! - Raw ISO-2022-JP, which old Japanese mailers put in headers without
 //!   encoding, is converted.
+//! - ISO-2022-JP knows all the sets of ISO-2022-JP-2, e.g. JIS X 0212,
+//!   whatever the charset is named, and ISO-2022-JP-1 is known.
 //! - An invalid byte sequence in a charset is replaced with U+FFFD, as
 //!   the Encoding Standard does, so that the output is UTF-8.
 //! - UTF-7 is converted as the RFCs specify, not as glibc does: an
@@ -31,9 +34,20 @@
 //!
 //! Otherwise it is the same as [`decode_field`].
 
-use encoding_rs::{DecoderResult, Encoding, ISO_2022_JP, SHIFT_JIS};
+use encoding_rs::{DecoderResult, Encoding, SHIFT_JIS};
 
-use crate::utf7::{self, Rules};
+use crate::iso2022jp;
+use crate::utf7;
+
+/// How a charset is converted, in particular what is invalid and what
+/// comes of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rules {
+    /// As the iconv of glibc does for mewl (`mewl-rs-compat`).
+    Glibc,
+    /// As the RFCs specify, with what is invalid replaced (`mewl-rs`).
+    Rfc,
+}
 
 const ESC: u8 = 0x1b;
 const DEL: u8 = 0x7f;
@@ -75,8 +89,8 @@ pub fn decode_field(s: &[u8]) -> Vec<u8> {
 /// Decodes encoded-words anywhere in a header value (see above).
 pub fn decode_text(s: &[u8]) -> Vec<u8> {
     if s.contains(&ESC) && s.is_ascii() {
-        let (text, _) = ISO_2022_JP.decode_without_bom_handling(s);
-        decode_anywhere(text.as_bytes())
+        let text = iso2022jp::convert(iso2022jp::Variant::Jp, Rules::Rfc, s, true).unwrap_or_default();
+        decode_anywhere(&text)
     } else {
         decode_anywhere(s)
     }
@@ -155,13 +169,13 @@ fn find_word(s: &[u8]) -> Option<(usize, Word)> {
     let text_len = rest.iter().position(|&c| c == b'?' || is_lwsp(c))?;
     rest.get(text_len..)?.strip_prefix(b"?=")?;
     let len = 2 + cs_len + 3 + text_len + 2;
-    Word::parse(&s[..len]).map(|w| (len, w))
+    Word::parse(&s[..len], Rules::Rfc).map(|w| (len, w))
 }
 
 /// Decodes `=?charset[*lang]?B|Q?encoded-text?=` and appends it to `out`.
 /// `false` (and nothing appended) if `word` is not an encoded-word.
 fn decode_word(word: &[u8], out: &mut Vec<u8>) -> bool {
-    match Word::parse(word) {
+    match Word::parse(word, Rules::Glibc) {
         Some(word) => word.convert_into(out, Rules::Glibc),
         None => false,
     }
@@ -172,13 +186,18 @@ fn decode_word(word: &[u8], out: &mut Vec<u8>) -> bool {
 enum Charset {
     /// By encoding_rs.
     Encoding(&'static Encoding),
+    /// ISO-2022-JP and its variants.
+    Iso2022Jp(iso2022jp::Variant),
     /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
     Utf7(utf7::Variant),
 }
 
 impl Charset {
-    /// The charset for a MIME charset name.
-    fn for_name(name: &[u8]) -> Option<Self> {
+    /// The charset for a MIME charset name, if known by `rules`.
+    fn for_name(name: &[u8], rules: Rules) -> Option<Self> {
+        if let Some(variant) = iso2022jp::Variant::for_charset(name) {
+            return variant.is_known(rules).then_some(Charset::Iso2022Jp(variant));
+        }
         if let Some(variant) = utf7::Variant::for_charset(name) {
             return Some(Charset::Utf7(variant));
         }
@@ -188,7 +207,6 @@ impl Charset {
         /* Names known to iconv but not to the Encoding Standard. */
         match name.to_ascii_lowercase().as_slice() {
             b"cp932" | b"ms932" => Some(Charset::Encoding(SHIFT_JIS)),
-            b"iso-2022-jp-1" | b"iso-2022-jp-2" | b"iso-2022-jp-3" => Some(Charset::Encoding(ISO_2022_JP)),
             _ => None,
         }
     }
@@ -198,13 +216,14 @@ impl Charset {
     /// and ends in its initial state, ISO-2022-JP and UTF-7: joined, a
     /// shift right after another one would be an error.
     fn joinable(self) -> bool {
-        self != Charset::Encoding(ISO_2022_JP) && !matches!(self, Charset::Utf7(_))
+        !matches!(self, Charset::Iso2022Jp(_) | Charset::Utf7(_))
     }
 
-    /// Converts `input` to UTF-8, UTF-7 by `rules`. With `keep_invalid`,
-    /// an invalid byte sequence is kept as it is by [`Rules::Glibc`], as
-    /// mewl does, and replaced with U+FFFD by [`Rules::Rfc`] but an
-    /// invalid sequence of UTF-7 in US-ASCII; otherwise it fails.
+    /// Converts `input` to UTF-8, ISO-2022-JP and UTF-7 by `rules`. With
+    /// `keep_invalid`, an invalid byte sequence is kept as it is by
+    /// [`Rules::Glibc`], as mewl does, and replaced with U+FFFD by
+    /// [`Rules::Rfc`] but an invalid sequence of UTF-7 in US-ASCII;
+    /// otherwise it fails.
     fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
         match self {
             Charset::Encoding(encoding) if keep_invalid && rules == Rules::Rfc => {
@@ -212,6 +231,7 @@ impl Charset {
                 Some(text.into_owned().into_bytes())
             }
             Charset::Encoding(encoding) => convert(encoding, input, keep_invalid),
+            Charset::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Charset::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
         }
     }
@@ -225,8 +245,8 @@ struct Word {
 
 impl Word {
     /// Parses `word`, which is an encoded-word as a whole. `None` if it
-    /// is not valid or the charset is unknown.
-    fn parse(word: &[u8]) -> Option<Self> {
+    /// is not valid or the charset is unknown by `rules`.
+    fn parse(word: &[u8], rules: Rules) -> Option<Self> {
         let inner = word.strip_prefix(b"=?")?.strip_suffix(b"?=")?;
         if word.len() < 9 {
             return None;
@@ -251,7 +271,7 @@ impl Word {
             b'Q' => decode_q(text)?,
             _ => return None,
         };
-        let charset = Charset::for_name(charset)?; /* unknown charset */
+        let charset = Charset::for_name(charset, rules)?; /* unknown charset */
         Some(Word { charset, bytes })
     }
 
