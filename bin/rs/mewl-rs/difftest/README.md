@@ -106,11 +106,10 @@ prints with what `mew-header-decode` makes of it.
 ```
 % ./mewcheck.py ../target/release/mewl-rs
 ...
-TOTAL: 24 differ, 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191830 same
+TOTAL: 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191854 same
 ```
 
-With Emacs 30.2, the 24 differences are in `us-ascii`, which Mew
-guesses when it has 8-bit bytes. "invalid" are codes that Emacs keeps
+With Emacs 30.2, none differ. "invalid" are codes that Emacs keeps
 as raw bytes and mewl-rs replaces with U+FFFD, and "invalid to Mew
 only" those that mewl-rs decodes, such as the extensions of Big5-HKSCS
 and the bytes that windows-1252 leaves undefined. "no Unicode in
@@ -119,6 +118,29 @@ Emacs" are characters such as the NEC special characters of JIS X
 Private Use Area or to unassigned code points, such as most of the
 extensions of Big5, where mewl-rs has the characters of the Encoding
 Standard.
+
+`--guess` compares how they guess a charset, in the locale given by
+`--locale` (`ja_JP.UTF-8` by default): texts in Japanese and in Latin
+letters, in six charsets, and random bytes, in an encoded-word in a
+charset that Mew does not know.
+
+```
+% ./mewcheck.py ../target/release/mewl-rs --guess
+...
+TOTAL: 7 differ, 164 invalid to Mew only, 66 no Unicode in Emacs, 808 same
+% ./mewcheck.py ../target/release/mewl-rs --guess --locale C.UTF-8
+...
+TOTAL: 45 differ, 52 invalid to Mew only, 18 no Unicode in Emacs, 930 same
+```
+
+Six of the differences are texts in ISO-2022-JP, which Mew does not
+decode by guessing, and the rest random bytes, which Emacs judges by
+heuristics that mewl-rs does not follow, but one: EUC-JP with
+Katakana of JIS X 0201, which Emacs takes for Shift_JIS in English.
+
+mewl-rs, invoked as `mewl-rs`, guesses by the locale, so its results
+depend on `LC_ALL`, `LC_CTYPE`, and `LANG` where it runs; the counts
+below are in `C.UTF-8`.
 
 ## Reproducing the counts in the commit messages
 
@@ -184,6 +206,10 @@ commit after main). The commands are run in this directory.
 | 21. convert charsets as Mew does in mewl-rs | `./difftest.py rs/20 rs/21 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 114 mismatches: 73 on +utf7/29 (`unicode-1-1-utf-7`), 14 on +iso2022jp/16 (GB 2312), and 27 on 7 messages of `+charset` |
 | | `./mewcheck.py rs/21` (and rs/20) | 24 differ, 191830 same (188 differ, 191666 same) |
+
+| 22. guess charsets as Mew does in mewl-rs | `./difftest.py rs/21 rs/22 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 251 mismatches, on raw 8-bit headers (+inbox/16, +uni/83 and 84), charsets not known (+mime/19, +utf7/28, and 18 names in `+charset`, such as `x-unknown`, `utf-32`, and `euc_jp`), UTF-8 with an 8-bit byte between ASCII ones (+mime/26), and US-ASCII with 8-bit bytes (+charset/183) |
+| | `./mewcheck.py rs/22` | 0 differ (24 before, all in `us-ascii`) |
 
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is

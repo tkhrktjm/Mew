@@ -53,8 +53,18 @@ difftest/README.ja.md を参照。
   `Re:=?UTF-8?B?...?=`。
 - 隣り合う同じ charset の encoded-word はまとめて変換するので、
   その間で分割されたマルチバイト文字も元に戻る。
-- 昔の日本のメーラが符号化せずに書いた、ヘッダ中の生の ISO-2022-JP を
-  UTF-8 に変換する。
+- Mew が charset を推測するところでは、`mewl-rs` も推測する: ヘッダ中の
+  UTF-8 でない生の文字列、たとえば昔の日本のメーラが符号化せずに書いた
+  ISO-2022-JP や Shift_JIS と、`x-unknown` のような知らない charset、
+  8 ビットのバイトを含む US-ASCII、ASCII の間に 8 ビットのバイトを含む
+  UTF-8 の encoded-word である。Emacs は言語環境によって推測し、
+  `mewl-rs` は Mew が渡すロケール (`LC_ALL`、`LC_CTYPE`、`LANG`) によって
+  推測し、文字列を復号できた最初のものを採る: 日本語では UTF-8、
+  ISO-2022-JP、EUC-JP、Shift_JIS (JIS X 0208 と 0212 のみ)、韓国語と
+  中国語では UTF-8 と、言語に応じて EUC-KR、GB 2312、Big5 のいずれか、それ以外では
+  UTF-8、C1 制御文字を除く ISO-8859-1、EUC-JP、Shift_JIS で、最後は
+  ISO-8859-1 である。Emacs と違い、ISO-2022-JP を復号し、Mew が生の
+  バイトとして表示する 8 ビットのバイトを含む US-ASCII も推測する。
 - charset は Encoding Standard の名前か、そうでなければ glibc の名前、
   たとえば `cp949`、`cp936`、`latin9`、`ujis`、または Mew の名前
   (`unicode-1-1-utf-7`) で指定できる。Emacs が Unicode でその文字を持つ
@@ -82,8 +92,7 @@ difftest/README.ja.md を参照。
   Encoding Standard と同じく最大部分ごとに一つずつ U+FFFD (REPLACEMENT
   CHARACTER) に置き換える。`mewl` はそのバイトのまま残す。そのため、
   復号した値は常に UTF-8 であり、壊れた文字を含むフィールドも、バイト
-  ごとではなく case folding と NFC で比べられる。符号化されていない生の
-  8 ビットの文字列は、charset が分からないのでそのまま残す。
+  ごとではなく case folding と NFC で比べられる。
 - UTF-7 と UTF-7-IMAP は、glibc とは違い、RFC 2152 と RFC 3501 の
   規定どおりに変換する。シフトされた並び (`+` または `&` から base64 の
   終わりまで) は、全体として正しい形のときだけ復号する。すなわち、

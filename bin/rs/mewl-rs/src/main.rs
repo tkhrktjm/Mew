@@ -21,6 +21,7 @@ mod compat;
 mod error;
 mod flavor;
 mod folder;
+mod guess;
 mod header;
 mod iso2022jp;
 mod jis;

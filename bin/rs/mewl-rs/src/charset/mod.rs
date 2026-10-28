@@ -18,13 +18,16 @@
 //! does, with seven characters of JIS X 0208 as Emacs takes them
 //! ([`crate::jis`]); GB 2312, GB18030, EUC-KR, and Big5 with a few
 //! characters as Emacs takes them ([`patched`]); and the rest by
-//! encoding_rs.
+//! encoding_rs. Where Mew guesses, so does `mewl-rs` ([`crate::guess`]):
+//! a charset not known, US-ASCII with an 8-bit byte, and UTF-8 with an
+//! 8-bit byte between ASCII ones.
 
 pub mod glibc;
 pub mod patched;
 
-use encoding_rs::{BIG5, DecoderResult, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS};
+use encoding_rs::{BIG5, DecoderResult, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS, UTF_8};
 
+use crate::guess;
 use crate::iso2022jp;
 use crate::jis;
 use crate::mime::Rules;
@@ -47,6 +50,8 @@ pub enum Converter {
     /// GB 2312, GB18030, EUC-KR, or Big5: by encoding_rs, and for
     /// [`Rules::Rfc`] with a few characters as Emacs takes them.
     Patched(Patch),
+    /// Guessing the charset, for [`Rules::Rfc`] ([`crate::guess`]).
+    Guess,
 }
 
 /// A single-byte charset of glibc whose lower half is US-ASCII.
@@ -62,6 +67,17 @@ pub struct SingleByte {
 }
 
 impl SingleByte {
+    /// ISO-8859-1 without the C1 controls (0x80 to 0x9F).
+    pub(crate) const fn latin1_without_c1() -> Self {
+        let mut upper = [0; 128];
+        let mut i = 0x20;
+        while i < 128 {
+            upper[i] = 0x80 + i as u16;
+            i += 1;
+        }
+        SingleByte { encoding: encoding_rs::WINDOWS_1252, mew: true, upper }
+    }
+
     /// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte is
     /// kept as it is by [`Rules::Glibc`] and replaced with U+FFFD by
     /// [`Rules::Rfc`]; otherwise it fails.
@@ -88,8 +104,9 @@ impl Converter {
     /// invalid byte sequence is kept as it is by [`Rules::Glibc`], as
     /// mewl does, and replaced with U+FFFD by [`Rules::Rfc`] but an
     /// invalid sequence of UTF-7 in US-ASCII; otherwise it fails.
-    fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
+    pub(crate) fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
         match self {
+            Converter::Guess => Some(guess::guess(input)),
             Converter::Encoding(encoding) if keep_invalid && rules == Rules::Rfc => {
                 let (text, _) = encoding.decode_without_bom_handling(input);
                 Some(text.into_owned().into_bytes())
@@ -104,9 +121,11 @@ impl Converter {
         }
     }
 
-    /// What `mewl-rs` takes a converter of glibc for.
+    /// What `mewl-rs` takes a converter of glibc for. US-ASCII, whose
+    /// upper half is invalid, is guessed when it is not.
     fn for_rfc(self) -> Self {
         match self {
+            Converter::Single(table) if table.upper.iter().all(|&c| c == 0) => Converter::Guess,
             Converter::Single(table) if !table.mew => Converter::Encoding(table.encoding),
             converter => converter,
         }
@@ -188,13 +207,16 @@ impl Charset {
                 /* glibc tells apart what the Encoding Standard does not,
                 such as Shift_JIS and CP932, or ISO-8859-1 and windows-1252. */
                 let converter = glibc_converter(name).map(Converter::for_rfc);
-                if let Some(Converter::Jis(_) | Converter::Patched(_) | Converter::Single(_)) = converter {
+                if let Some(Converter::Jis(_) | Converter::Patched(_) | Converter::Single(_) | Converter::Guess) =
+                    converter
+                {
                     return converter.map(Charset::Rfc);
                 }
                 if let Some(encoding) = Encoding::for_label_no_replacement(name) {
                     return Some(Charset::Rfc(Converter::for_encoding(name, encoding)));
                 }
-                converter.map(Charset::Rfc)
+                /* A charset not known is guessed, as Mew does. */
+                Some(Charset::Rfc(converter.unwrap_or(Converter::Guess)))
             }
         }
     }
@@ -216,6 +238,10 @@ impl Charset {
             Charset::Glibc { name, retry } => {
                 let by = |converter: Option<Converter>, keep| converter?.convert(input, Rules::Glibc, keep);
                 by(name, false).or_else(|| by(retry, false)).or_else(|| by(retry, true)).or_else(|| by(name, true))
+            }
+            /* UTF-8 with an 8-bit byte between ASCII is guessed, as Mew does. */
+            Charset::Rfc(Converter::Encoding(e)) if e == UTF_8 && guess::lone_8bit(input) => {
+                Converter::Guess.convert(input, Rules::Rfc, true)
             }
             Charset::Rfc(converter) => {
                 converter.convert(input, Rules::Rfc, false).or_else(|| converter.convert(input, Rules::Rfc, true))
@@ -342,12 +368,15 @@ mod tests {
             ("cp936", encoding_rs::GBK),
             ("cp874", encoding_rs::WINDOWS_874),
             ("latin9", encoding_rs::ISO_8859_15),
-            ("ANSI_X3.4-1968", encoding_rs::WINDOWS_1252),
             ("koi-8", encoding_rs::KOI8_R),
         ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Encoding(encoding))), "{name}");
         }
-        assert_eq!(rfc("UTF-32"), None);
+        /* guessed, as Mew does */
+        assert_eq!(rfc("UTF-32"), Some(Charset::Rfc(Converter::Guess)));
+        assert_eq!(rfc("x-unknown"), Some(Charset::Rfc(Converter::Guess)));
+        assert_eq!(rfc("us-ascii"), Some(Charset::Rfc(Converter::Guess)));
+        assert_eq!(rfc("ANSI_X3.4-1968"), Some(Charset::Rfc(Converter::Guess)));
         assert_eq!(rfc("unicode-1-1-utf-7"), Some(Charset::Rfc(Converter::Utf7(utf7::Variant::Utf7))));
         assert_eq!(glibc("unicode-1-1-utf-7"), None);
         /* with a few characters as Emacs takes them */

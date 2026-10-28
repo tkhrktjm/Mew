@@ -105,17 +105,39 @@ Mew と同じく、つまり Emacs と同じように charset を復号する。
 ```
 % ./mewcheck.py ../target/release/mewl-rs
 ...
-TOTAL: 24 differ, 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191830 same
+TOTAL: 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191854 same
 ```
 
-Emacs 30.2 では、24 の違いは `us-ascii` にある。Mew は 8 ビットのバイトを
-含む `us-ascii` では charset を推測する。"invalid" は、Emacs が生のバイトの
+Emacs 30.2 では、異なるものはない。"invalid" は、Emacs が生のバイトの
 まま残し、mewl-rs が U+FFFD に置き換えるコードである。"invalid to Mew
 only" は mewl-rs が復号するもので、Big5-HKSCS の拡張や、windows-1252 が
 未定義とするバイトなどである。"no Unicode in Emacs" は JIS X 0208 の NEC
 特殊文字などの文字で、"private or unassigned to Mew" は、Emacs が私用
 領域や未割り当てのコードポイントに対応させるもので、Big5 の拡張の大部分
 などである。mewl-rs は、これらに Encoding Standard の文字を当てる。
+
+`--guess` は、`--locale` で与えたロケール (既定は `ja_JP.UTF-8`) で、
+charset の推測のしかたを比べる。対象は、Mew が知らない charset の
+encoded-word に入れた、6 つの charset の日本語とラテン文字のテキストと、
+ランダムなバイト列である。
+
+```
+% ./mewcheck.py ../target/release/mewl-rs --guess
+...
+TOTAL: 7 differ, 164 invalid to Mew only, 66 no Unicode in Emacs, 808 same
+% ./mewcheck.py ../target/release/mewl-rs --guess --locale C.UTF-8
+...
+TOTAL: 45 differ, 52 invalid to Mew only, 18 no Unicode in Emacs, 930 same
+```
+
+違いのうち 6 つは、Mew が推測では復号しない ISO-2022-JP のテキストで、
+残りはランダムなバイト列である。Emacs はこれを mewl-rs が従わない
+経験則で判断する。ただし一つだけ例外があり、JIS X 0201 のカタカナを含む
+EUC-JP を、Emacs は英語の環境で Shift_JIS とみなす。
+
+`mewl-rs` として起動した mewl-rs はロケールで推測するので、結果は実行する
+環境の `LC_ALL`、`LC_CTYPE`、`LANG` に依存する。下の件数は `C.UTF-8` での
+ものである。
 
 ## コミットログの件数の再現
 
@@ -184,6 +206,10 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | 21. convert charsets as Mew does in mewl-rs | `./difftest.py rs/20 rs/21 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 114 mismatches: +utf7/29 (`unicode-1-1-utf-7`) で 73、+iso2022jp/16 (GB 2312) で 14、`+charset` の 7 通のメッセージで 27 |
 | | `./mewcheck.py rs/21` (と rs/20) | 24 differ, 191830 same (188 differ, 191666 same) |
+
+| 22. guess charsets as Mew does in mewl-rs | `./difftest.py rs/21 rs/22 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 251 mismatches: 8 ビットの生のヘッダ (+inbox/16、+uni/83 と 84)、未知の charset (+mime/19、+utf7/28、`+charset` の `x-unknown`、`utf-32`、`euc_jp` など 18 の名前)、ASCII の間に 8 ビットのバイトがある UTF-8 (+mime/26)、8 ビットのバイトを含む US-ASCII (+charset/183) |
+| | `./mewcheck.py rs/22` | 0 differ (以前は 24、すべて `us-ascii`) |
 
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
