@@ -127,11 +127,19 @@ fn unicode_matching() {
         assert_eq!(f.run(prog, &["-p", "subject=\u{e4}rger", "+u"]), "2\n3\n");
         /* NFC only */
         assert_eq!(f.run(prog, &["-p", "subject==A\u{308}rger", "+u"]), "2\n");
-        /* width is not folded */
-        assert_eq!(f.run(prog, &["-p", "subject=abc", "+u"]), "");
         /* the whole header is not normalized */
         assert_eq!(f.run(prog, &["-p", "head=STRASSE", "+u"]), "");
     }
+    /* width is folded by mewl-rs only, and "==" folds nothing. */
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=abc", "+u"]), "");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=abc", "+u"]), "4\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject==ABC", "+u"]), "");
+    /* nor the code points of Windows for JIS X 0208 */
+    f.write("u/5", "Subject: =?UTF-8?B?44CcIO+9ng==?=\n\n".as_bytes());
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=〜", "+u"]), "5\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject=～", "+u"]), "5\n");
+    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=～", "+u"]), "5\n");
+    assert_eq!(f.run("mewl-rs", &["-p", "subject==〜 〜", "+u"]), "");
 }
 
 #[test]

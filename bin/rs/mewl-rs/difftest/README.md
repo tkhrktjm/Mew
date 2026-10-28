@@ -149,6 +149,10 @@ commit after main). The commands are run in this directory.
 | | `./difftest.py rs/18 rs/19 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 61 mismatches: 20 on +mime/6, 26 on +iso2022jp/4, and 15 on 8 texts in `+charset` |
 
+| 20. fold characters for `=` and `!=` in mewl-rs | `./difftest.py rs/19 rs/20 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 73 mismatches, all picks with `=` or `!=`: 60 in `+uni`, 7 in `+iso2022jp`, 4 in `+mime`, and 2 in `+utf7` |
+| | `./difftest.py --suite uni C-464013a-char-fold rs/20 --name-b mewl-rs`, with the C mewl built with `--enable-utf8proc-char-fold` | 1626 run, 224 mismatches, the same cases and outputs as `./difftest.py --suite uni C-464013a rs/19 --name-b mewl-rs` |
+
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is
 made again for step 16 with `+charset`, and those of 7572 become those
