@@ -49,7 +49,13 @@ difftest/README.ja.md を参照。
 - charset は Encoding Standard の名前か、そうでなければ glibc の名前、
   たとえば `cp949`、`cp936`、`latin9`、`ujis` で指定でき、Encoding Standard
   の規定どおりに encoding_rs で変換する。たとえば ISO-8859-1 と US-ASCII は
-  windows-1252 になる。
+  windows-1252 になる。ただし、Shift_JIS、EUC-JP、ISO-2022-JP では、JIS X 0208 の
+  7 文字は Windows のものではなく、Emacs が、したがって Mew が表示する
+  とおり JIS のものである: 0x2141 は "～" (U+FF5E) ではなく "〜" (U+301C)
+  であり、0x2142、0x213D、0x215D、0x2171、0x2172、0x224C も同様である。
+  Shift_JIS と CP932 (`windows-31j`)、EUC-JP と eucJP-ms は glibc と同じ
+  ように区別し、CP932 と eucJP-ms は Emacs と同じく Windows のものの
+  ままである。
 - ISO-2022-JP は、charset の名前にかかわらず、ISO-2022-JP-2 (RFC 1554)
   のすべての文字集合を知っている。どの文字集合が続くかはエスケープ
   シーケンスが示すからである: 一部の User-Agent の "Gojō" のような

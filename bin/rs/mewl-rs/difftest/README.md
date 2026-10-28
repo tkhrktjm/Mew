@@ -58,7 +58,7 @@ same as mewl.
 | `uni` | 1626 | pick with Unicode case folding and NFC |
 | `utf7` | 471 | pick and sort on encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid |
 | `iso2022jp` | 252 | pick and sort on encoded-words in ISO-2022-JP and its variants, and on raw ISO-2022-JP |
-| `charset` | 329 | pick and sort on an encoded-word in each of 179 charset names, of the Encoding Standard, of glibc, of both, of neither, and spelled as glibc normalizes them, and on texts in 26 single-byte charsets and 11 texts in Shift_JIS, EUC-JP, and their variants |
+| `charset` | 331 | pick and sort on an encoded-word in each of 179 charset names, of the Encoding Standard, of glibc, of both, of neither, and spelled as glibc normalizes them, and on texts in 26 single-byte charsets and 11 texts in Shift_JIS, EUC-JP, and their variants |
 | `wellformed` | 3000 | well-formed pick patterns on an empty folder |
 
 `--corpus-a` and `--corpus-b` choose a variant of the corpus for each
@@ -77,7 +77,7 @@ binary, to tell the effects of fixes apart:
 
 Against the C mewl of 464013a built with iconv and utf8proc 2.10
 (without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 15
-of the 7901 cases, all in the `charset` suite, for the known
+of the 7903 cases, all in the `charset` suite, for the known
 differences in ../README.md: on encoded-words in charsets that glibc
 knows but mewl-rs does not (UTF-32, UCS-4, JOHAB, ISO-2022-KR,
 ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
@@ -86,7 +86,7 @@ ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7901 run, 15 mismatches
+TOTAL: 7903 run, 15 mismatches
 ```
 
 The corpus has no lone low surrogate in UTF-7, which mewl-rs takes
@@ -145,11 +145,17 @@ commit after main). The commands are run in this directory.
 | | `./difftest.py rs/17 rs/18 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7901 run, 35 mismatches: 12 on +mime/6 and 23 on 8 texts in `+charset` |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7901 run, 0 mismatches |
 
+| 19. take seven characters of JIS X 0208 as Emacs does in mewl-rs | `./difftest.py C-464013a rs/19 --name-b mewl-rs-compat` | 7903 run, 15 mismatches, all in `+charset` |
+| | `./difftest.py rs/18 rs/19 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 61 mismatches: 20 on +mime/6, 26 on +iso2022jp/4, and 15 on 8 texts in `+charset` |
+
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is
 made again for step 16 with `+charset`, and those of 7572 become those
-of 7585, for step 17 with texts in `+charset`, 7880, and for step 18
-with texts in Shift_JIS and EUC-JP, 7901.
+of 7585, for step 17 with texts in `+charset`, 7880, for step 18 with
+texts in Shift_JIS and EUC-JP, 7901, and for step 19 with 0x213D in
+them, 7903. The rows of steps 16 to 18 are on the corpora of their
+steps.
 
 mewl-rs-compat changes only in steps 4, 8, and 14, which follow main,
 in steps 10 and 15, which decode UTF-7 and ISO-2022-JP, and in steps

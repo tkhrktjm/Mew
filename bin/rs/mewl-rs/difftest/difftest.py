@@ -288,7 +288,7 @@ def suite_charset(r):
     for _, text in mkcorpus.CHARSET_TEXTS:
         for codec in GUESS_CODECS:
             chars |= set(text.decode(codec, "ignore"))
-    chars |= set("日本〜～‖∥−－¢￠£￡¬￢¥‾~①ⅰ￤¦ｱ\ue000\ue3ac\x85")
+    chars |= set("日本〜～‖∥−－¢￠£￡¬￢—―¥‾~①ⅰ￤¦ｱ\ue000\ue3ac\x85")
     for c in sorted(chars - set('"\\')):
         r.check(["-p", f'subject=="{c}"', "+charset"])
     r.check(["-d", "subject:", "+charset"])

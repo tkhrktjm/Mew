@@ -33,7 +33,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 6
+VERSION = 7
 
 
 def w(path, data):
@@ -260,15 +260,16 @@ CHARSET_TEXTS = [
 ]
 
 # Texts in Shift_JIS and EUC-JP and their variants: the six characters
-# of JIS X 0208 that glibc and Windows map differently, 0x5C and 0x7E,
+# of JIS X 0208 that glibc and Windows map differently, 0x213D, which
+# Emacs maps differently from both, 0x5C and 0x7E,
 # the NEC special characters and the IBM extensions, which make mewl
 # retry shift_jis with CP932 and euc-jp with eucJP-ms, the user-defined
 # area, and C1 controls.
 JIS_TEXTS = [
-    ("shift_jis", b"\x93\xfa\x96\x7b\x81\x60\x81\x61\x81\x7c\x81\x91\x81\x92\x81\xca\\~"),
+    ("shift_jis", b"\x93\xfa\x96\x7b\x81\x60\x81\x61\x81\x7c\x81\x91\x81\x92\x81\xca\x81\x5c\\~"),
     ("Shift_JIS", b"\x81\x60\\\x87\x40"), ("sjis", b"\x81\x60\\\x87\x40\xfa\x40"), ("shift_jis", b"\x81\x60\x80"),
     ("cp932", b"\x81\x60\\\x87\x40\xfa\x40\xf0\x40"), ("windows-31j", b"\x81\x60\x80\xed\x40"),
-    ("euc-jp", b"\xc6\xfc\xcb\xdc\xa1\xc1\xa1\xc2\xa1\xdd\xa1\xf1\xa1\xf2\xa2\xcc\x85\x8e\xb1"),
+    ("euc-jp", b"\xc6\xfc\xcb\xdc\xa1\xc1\xa1\xc2\xa1\xdd\xa1\xf1\xa1\xf2\xa2\xcc\xa1\xbd\x85\x8e\xb1"),
     ("EUC-JP", b"\xa1\xc1\xad\xa1"), ("eucjp", b"\xa1\xc1\xad\xa1\xf5\xa1"), ("euc-jp", b"\xa1\xc1\xf9\xa1\x8f\xa2\xc3"),
     ("euc-jp-ms", b"\xa1\xc1\xad\xa1\xf5\xa1\x8f\xf3\xf3\x8f\xa2\xc3\x8f\xf5\xa1\x85"),
 ]
