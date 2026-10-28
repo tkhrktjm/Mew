@@ -139,23 +139,30 @@ names glibc knows, `src/charset/glibc.rs`.
 A single-byte charset is converted by the table of glibc, which the
 script also takes from glibc: so ISO-8859-1 is not windows-1252, as in
 the Encoding Standard, but has the C1 controls, US-ASCII has no byte
-over 0x7F, and a byte undefined in windows-1252 is invalid. Other
+over 0x7F, and a byte undefined in windows-1252 is invalid. Shift_JIS,
+EUC-JP, CP932, and eucJP-ms are converted as glibc does too, by
+encoding_rs patched where they differ: in Shift_JIS and EUC-JP,
+0x2141 of JIS X 0208 ("〜") is U+301C (WAVE DASH), not U+FF5E as in
+Windows, and so are five more characters, the NEC special characters
+and the IBM extensions are invalid, so that `mewl` retries with CP932
+or eucJP-ms, and 0x5C and 0x7E of Shift_JIS are "¥" and "‾".
+ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted as
+glibc does, invalid sequences and the tables of glibc included, not as
+the Encoding Standard, which knows only ISO-2022-JP, with the table of
+Windows: e.g. "①" is not in ISO-2022-JP, and ISO-2022-JP-1, which
+glibc lacks, is not decoded. The other
 charsets are converted by encoding_rs (the Encoding Standard), not by
-iconv; ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted
-as glibc does, invalid sequences and the tables of glibc included, not
-as the Encoding Standard, which knows only ISO-2022-JP, with the table
-of Windows: e.g. "①" is not in ISO-2022-JP, and ISO-2022-JP-1, which
-glibc lacks, is not decoded.
-Unicode is normalized by unicode-normalization and caseless, not by
-utf8proc. So a few results differ from `mewl`'s:
+iconv. Unicode is normalized by unicode-normalization and caseless,
+not by utf8proc. So a few results differ from `mewl`'s:
 
-- 0x8160 of Shift_JIS ("〜") is U+FF5E, while glibc gives U+301C.
+- The other multibyte charsets, such as GBK, Big5, and EUC-KR, have
+  the tables of the Encoding Standard, which are not those of glibc.
 - An encoded-word in a charset which glibc knows but encoding_rs and
   mewl-rs do not, such as UTF-32, UCS-4, ISO-2022-KR, ISO-2022-CN,
   JOHAB, and EBCDIC, is not decoded.
 - UTF-16 and UCS-2 are UTF-16LE (UCS-2BE is UTF-16BE), without the
   byte order mark which glibc takes for UTF-16 and seems to keep for
-  the next encoded-words.
+  the next encoded-words, and an invalid sequence is kept otherwise.
 - windows-1255 and windows-1258 are converted without the composition
   of glibc, by which `mewl` loses the last character of an
   encoded-word that may be composed with what follows, as it never

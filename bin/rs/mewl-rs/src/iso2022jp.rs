@@ -40,8 +40,9 @@
 //! characters of the set it designates, unknown, are replaced too: a
 //! double-byte set, such as JIS X 0213, is told by `$`.
 
-use encoding_rs::{EUC_JP, EUC_KR, Encoding, GBK, ISO_8859_7};
+use encoding_rs::{EUC_JP, EUC_KR, GBK, ISO_8859_7};
 
+use crate::jis::{self, one};
 use crate::mime::Rules;
 
 const ESC: u8 = 0x1b;
@@ -247,16 +248,7 @@ impl Decoder {
             if b1 == 0x2d || b1 >= 0x75 {
                 return None;
             }
-            let ch = match (b1, b2) {
-                (0x21, 0x41) => '\u{301c}',
-                (0x21, 0x42) => '\u{2016}',
-                (0x21, 0x5d) => '\u{2212}',
-                (0x21, 0x71) => '\u{a2}',
-                (0x21, 0x72) => '\u{a3}',
-                (0x22, 0x4c) => '\u{ac}',
-                _ => return one(EUC_JP, &[b1 | 0x80, b2 | 0x80]),
-            };
-            return Some(ch);
+            return jis::jis0208(b1, b2).or_else(|| one(EUC_JP, &[b1 | 0x80, b2 | 0x80]));
         }
         one(EUC_JP, &[b1 | 0x80, b2 | 0x80])
     }
@@ -309,14 +301,6 @@ fn roman(c: u8) -> char {
         b'~' => '\u{203e}',
         c => char::from(c),
     }
-}
-
-/// `bytes` decoded into one character, `None` if invalid.
-fn one(encoding: &'static Encoding, bytes: &[u8]) -> Option<char> {
-    let text = encoding.decode_without_bom_handling_and_without_replacement(bytes)?;
-    let mut chars = text.chars();
-    let ch = chars.next()?;
-    chars.next().is_none().then_some(ch)
 }
 
 /// Converts `input` to UTF-8 by `rules`. With `keep_invalid`, what is

@@ -25,8 +25,8 @@ Suites (--suite, all but wellformed by default):
   iso2022jp  pick and sort on encoded-words in ISO-2022-JP and its
              variants, and on raw ISO-2022-JP (folder +iso2022jp)
   charset    pick on encoded-words in many charset names, to see which
-             names are known, and on texts in single-byte charsets
-             (folder +charset)
+             names are known, and on texts in single-byte charsets and
+             in Shift_JIS and EUC-JP (folder +charset)
   wellformed 3000 well-formed pick patterns on an empty folder, to see
              that two parsers accept and refuse the same ones
 
@@ -288,6 +288,7 @@ def suite_charset(r):
     for _, text in mkcorpus.CHARSET_TEXTS:
         for codec in GUESS_CODECS:
             chars |= set(text.decode(codec, "ignore"))
+    chars |= set("日本〜～‖∥−－¢￠£￡¬￢¥‾~①ⅰ￤¦ｱ\ue000\ue3ac\x85")
     for c in sorted(chars - set('"\\')):
         r.check(["-p", f'subject=="{c}"', "+charset"])
     r.check(["-d", "subject:", "+charset"])

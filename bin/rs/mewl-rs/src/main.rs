@@ -23,6 +23,7 @@ mod flavor;
 mod folder;
 mod header;
 mod iso2022jp;
+mod jis;
 mod mime;
 mod output;
 mod pattern;

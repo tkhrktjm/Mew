@@ -136,22 +136,29 @@ iconv 向けに読み替え、`shift_jis` を `CP932` で試すように、変�
 1 バイトの charset は、同じスクリプトが glibc から取り出した glibc の
 表で変換する。そのため ISO-8859-1 は Encoding Standard のような
 windows-1252 ではなく C1 制御文字を持ち、US-ASCII には 0x7F を超える
-バイトがなく、windows-1252 で未定義のバイトは不正である。ほかの charset
-の変換は iconv ではなく encoding_rs (Encoding Standard) による。ただし
-ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、不正な並びと glibc の
-表も含めて glibc と同じように変換し、このうち ISO-2022-JP だけを Windows の
-表で定義する Encoding Standard には従わない。
+バイトがなく、windows-1252 で未定義のバイトは不正である。Shift_JIS、
+EUC-JP、CP932、eucJP-ms も、glibc と異なるところを修正した encoding_rs で、
+glibc と同じように変換する: Shift_JIS と EUC-JP では、JIS X 0208 の 0x2141
+("〜") は Windows のような U+FF5E ではなく U+301C (WAVE DASH) であり、
+ほかの 5 文字も同様である。NEC 特殊文字と IBM 拡張文字は不正なので、
+`mewl` は CP932 か eucJP-ms で再試行する。Shift_JIS の 0x5C と 0x7E は
+"¥" と "‾" である。ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、
+不正な並びと glibc の表も含めて glibc と同じように変換し、このうち
+ISO-2022-JP だけを Windows の表で定義する Encoding Standard には従わない。
 たとえば "①" は ISO-2022-JP にはなく、glibc にない ISO-2022-JP-1 は
-復号しない。Unicode の正規化は utf8proc ではなく unicode-normalization と
-caseless による。そのため、`mewl` と結果が異なる場合が少しある:
+復号しない。それ以外の charset の変換は iconv ではなく
+encoding_rs (Encoding Standard) による。Unicode の正規化は utf8proc では
+なく unicode-normalization と caseless による。そのため、`mewl` と結果が
+異なる場合が少しある:
 
-- Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
+- ほかのマルチバイトの charset、たとえば GBK、Big5、EUC-KR は Encoding
+  Standard の表を使い、glibc の表とは異なる。
 - glibc は知っているが encoding_rs と mewl-rs が知らない charset、たとえば
   UTF-32、UCS-4、ISO-2022-KR、ISO-2022-CN、JOHAB、EBCDIC の encoded-word は
   復号しない。
 - UTF-16 と UCS-2 は UTF-16LE として扱い (UCS-2BE は UTF-16BE)、glibc が
   UTF-16 で読み取り、次の encoded-word まで持ち越すらしいバイト順マークは
-  扱わない。
+  扱わない。また、不正な並びはそのまま残す。
 - windows-1255 と windows-1258 は glibc の合成なしで変換する。`mewl` は
   iconv を flush しないので、後に続くものと合成されうる encoded-word の
   最後の文字を失う。"café" は "caf" になる。
