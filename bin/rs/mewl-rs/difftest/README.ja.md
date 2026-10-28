@@ -151,6 +151,10 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | `./difftest.py rs/18 rs/19 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 61 mismatches: +mime/6 で 20、+iso2022jp/4 で 26、`+charset` の 8 つのテキストで 15 |
 
+| 20. fold characters for `=` and `!=` in mewl-rs | `./difftest.py rs/19 rs/20 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 73 mismatches、すべて `=` か `!=` の pick: `+uni` で 60、`+iso2022jp` で 7、`+mime` で 4、`+utf7` で 2 |
+| | `--enable-utf8proc-char-fold` 付きでビルドした C 版 mewl で `./difftest.py --suite uni C-464013a-char-fold rs/20 --name-b mewl-rs` | 1626 run, 224 mismatches、`./difftest.py --suite uni C-464013a rs/19 --name-b mewl-rs` と同じケースと出力 |
+
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
 `+charset` を加えて作り直して 7572 が 7585 に、手順 17 で `+charset` に

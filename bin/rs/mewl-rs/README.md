@@ -37,7 +37,16 @@ messages; see difftest/README.md.
 Invoked as `mewl-rs`, it decodes more than `mewl` does:
 
 - sort (`-d field`): the value printed is decoded.
-- pick (`-p head=val`): the whole header is decoded, field by field.
+- pick (`-p head=val`): the whole header is decoded, field by field,
+  though still compared as it is.
+- pick (`-p key=val` and `key!=val`) ignores more than case, as `mewl`
+  built with `--enable-utf8proc-char-fold` does: differences by
+  compatibility, such as width ("ＡＢＣ" is "abc" and "ｱ" is "ア"), and
+  default ignorable code points such as variation selectors
+  (NFKC_Casefold). Moreover, the seven characters of JIS X 0208 that
+  Windows maps differently (see below) match either way, so that "〜"
+  finds "～" and "～" finds "〜", whichever table a mailer used.
+  `key==val` and `key!==val` ignore none of these.
 - An encoded-word is decoded even if it is not delimited by white
   space, as in `Re:=?UTF-8?B?...?=`.
 - Adjacent encoded-words in the same charset are converted together,

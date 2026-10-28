@@ -278,7 +278,7 @@ impl Header {
             let end = self.next_field(p, true);
             if matched {
                 let body = self.c_str(p + key.len(), self.body_end(&end));
-                if unicode::field_match(&self.flavor.field_body(body), value, case_sensitive) {
+                if unicode::field_match(&self.flavor.field_body(body), value, self.flavor.fold(case_sensitive)) {
                     return true;
                 }
             }

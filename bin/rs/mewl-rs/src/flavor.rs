@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use crate::bytes::{BytesExt, Case};
 use crate::mime;
 use crate::pattern::{Pattern, PatternError};
+use crate::unicode::Fold;
 
 /// What the program does, which depends on the name it is invoked as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,6 +43,16 @@ impl Flavor {
     /// where this matters tells which bug.
     pub(crate) fn fixes_bugs(self) -> bool {
         self == Flavor::Utf8
+    }
+
+    /// What pick ignores comparing a field. `mewl-rs` folds characters
+    /// as mewl does with `--enable-utf8proc-char-fold` and more.
+    pub(crate) fn fold(self, case_sensitive: bool) -> Fold {
+        match self {
+            _ if case_sensitive => Fold::None,
+            Flavor::Compat => Fold::Case,
+            Flavor::Utf8 => Fold::Char,
+        }
     }
 
     /// The text that pick compares for a field. `body` follows the key,
