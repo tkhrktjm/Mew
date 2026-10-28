@@ -136,7 +136,11 @@ UTF-8, and does not know some names of the Encoding Standard, such as
 `x-sjis` and `gb_2312`. `tools/glibc-charsets.py` makes the list of the
 names glibc knows, `src/charset/glibc.rs`.
 
-Charsets are converted by encoding_rs (the Encoding Standard), not by
+A single-byte charset is converted by the table of glibc, which the
+script also takes from glibc: so ISO-8859-1 is not windows-1252, as in
+the Encoding Standard, but has the C1 controls, US-ASCII has no byte
+over 0x7F, and a byte undefined in windows-1252 is invalid. Other
+charsets are converted by encoding_rs (the Encoding Standard), not by
 iconv; ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted
 as glibc does, invalid sequences and the tables of glibc included, not
 as the Encoding Standard, which knows only ISO-2022-JP, with the table

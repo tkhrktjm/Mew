@@ -25,7 +25,8 @@ Suites (--suite, all but wellformed by default):
   iso2022jp  pick and sort on encoded-words in ISO-2022-JP and its
              variants, and on raw ISO-2022-JP (folder +iso2022jp)
   charset    pick on encoded-words in many charset names, to see which
-             names are known (folder +charset)
+             names are known, and on texts in single-byte charsets
+             (folder +charset)
   wellformed 3000 well-formed pick patterns on an empty folder, to see
              that two parsers accept and refuse the same ones
 
@@ -272,10 +273,23 @@ def suite_iso2022jp(r):
         r.check(["-d", k, "+iso2022jp"])
 
 
+# Codecs of Python to guess the characters of mkcorpus.CHARSET_TEXTS.
+GUESS_CODECS = ["latin-1", "cp1252", "iso8859_9", "cp1254", "iso8859_11", "tis_620", "cp874", "cp1250", "cp1251",
+                "cp1253", "cp1256", "cp1257", "koi8_r", "koi8_u", "mac_roman", "cp866", "iso8859_15", "iso8859_8",
+                "iso8859_6"]
+
+
 def suite_charset(r):
+    import mkcorpus
     for v in ["mewl", "MEWL", "mew", "=?"]:
         for op in ["=", "==", "!="]:
             r.check(["-p", f'subject{op}"{v}"', "+charset"])
+    chars = set()
+    for _, text in mkcorpus.CHARSET_TEXTS:
+        for codec in GUESS_CODECS:
+            chars |= set(text.decode(codec, "ignore"))
+    for c in sorted(chars - set('"\\')):
+        r.check(["-p", f'subject=="{c}"', "+charset"])
     r.check(["-d", "subject:", "+charset"])
 
 

@@ -8,8 +8,9 @@ charset name as glibc does: this lists the names glibc knows for each
 converter that mewl-rs-compat emulates, as glibc normalizes them. The
 names come from `iconv -l` and the converter of each from the
 gconv-modules files (the converters built into glibc, US-ASCII and
-UTF-8, are listed here). Run it where glibc is the C library; the
-output names the version of glibc.
+UTF-8, are listed here). For a single-byte charset, it also takes the
+table of its upper half from glibc. Run it where glibc is the C
+library; the output names the version of glibc.
 """
 
 import ctypes
@@ -39,40 +40,43 @@ BUILTIN = {
 }
 
 # The converters emulated, and how: by an encoding of encoding_rs, which
-# is what mewl-rs takes the names for, or by a decoder of mewl-rs.
+# is what mewl-rs takes the names for, by a decoder of mewl-rs, or, for
+# a single-byte charset, by the table of glibc (with the encoding of
+# encoding_rs for mewl-rs). CP1255 and CP1258 of glibc compose
+# characters, which a table does not.
 CONVERTERS = {
-    "ANSI_X3.4-1968": "Encoding(&WINDOWS_1252_INIT)",
-    "ISO-8859-1": "Encoding(&WINDOWS_1252_INIT)",
-    "ISO-8859-2": "Encoding(&ISO_8859_2_INIT)",
-    "ISO-8859-3": "Encoding(&ISO_8859_3_INIT)",
-    "ISO-8859-4": "Encoding(&ISO_8859_4_INIT)",
-    "ISO-8859-5": "Encoding(&ISO_8859_5_INIT)",
-    "ISO-8859-6": "Encoding(&ISO_8859_6_INIT)",
-    "ISO-8859-7": "Encoding(&ISO_8859_7_INIT)",
-    "ISO-8859-8": "Encoding(&ISO_8859_8_INIT)",
-    "ISO-8859-9": "Encoding(&WINDOWS_1254_INIT)",
-    "ISO-8859-10": "Encoding(&ISO_8859_10_INIT)",
-    "ISO-8859-11": "Encoding(&WINDOWS_874_INIT)",
-    "ISO-8859-13": "Encoding(&ISO_8859_13_INIT)",
-    "ISO-8859-14": "Encoding(&ISO_8859_14_INIT)",
-    "ISO-8859-15": "Encoding(&ISO_8859_15_INIT)",
-    "ISO-8859-16": "Encoding(&ISO_8859_16_INIT)",
-    "TIS-620": "Encoding(&WINDOWS_874_INIT)",
-    "IBM874": "Encoding(&WINDOWS_874_INIT)",
-    "KOI-8": "Encoding(&KOI8_R_INIT)",
-    "KOI8-R": "Encoding(&KOI8_R_INIT)",
-    "KOI8-U": "Encoding(&KOI8_U_INIT)",
-    "KOI8-RU": "Encoding(&KOI8_U_INIT)",
-    "IBM866": "Encoding(&IBM866_INIT)",
-    "MACINTOSH": "Encoding(&MACINTOSH_INIT)",
-    "CP1250": "Encoding(&WINDOWS_1250_INIT)",
-    "CP1251": "Encoding(&WINDOWS_1251_INIT)",
-    "CP1252": "Encoding(&WINDOWS_1252_INIT)",
-    "CP1253": "Encoding(&WINDOWS_1253_INIT)",
-    "CP1254": "Encoding(&WINDOWS_1254_INIT)",
+    "ANSI_X3.4-1968": ("Single", "WINDOWS_1252"),
+    "ISO-8859-1": ("Single", "WINDOWS_1252"),
+    "ISO-8859-2": ("Single", "ISO_8859_2"),
+    "ISO-8859-3": ("Single", "ISO_8859_3"),
+    "ISO-8859-4": ("Single", "ISO_8859_4"),
+    "ISO-8859-5": ("Single", "ISO_8859_5"),
+    "ISO-8859-6": ("Single", "ISO_8859_6"),
+    "ISO-8859-7": ("Single", "ISO_8859_7"),
+    "ISO-8859-8": ("Single", "ISO_8859_8"),
+    "ISO-8859-9": ("Single", "WINDOWS_1254"),
+    "ISO-8859-10": ("Single", "ISO_8859_10"),
+    "ISO-8859-11": ("Single", "WINDOWS_874"),
+    "ISO-8859-13": ("Single", "ISO_8859_13"),
+    "ISO-8859-14": ("Single", "ISO_8859_14"),
+    "ISO-8859-15": ("Single", "ISO_8859_15"),
+    "ISO-8859-16": ("Single", "ISO_8859_16"),
+    "TIS-620": ("Single", "WINDOWS_874"),
+    "IBM874": ("Single", "WINDOWS_874"),
+    "KOI-8": ("Single", "KOI8_R"),
+    "KOI8-R": ("Single", "KOI8_R"),
+    "KOI8-U": ("Single", "KOI8_U"),
+    "KOI8-RU": ("Single", "KOI8_U"),
+    "IBM866": ("Single", "IBM866"),
+    "MACINTOSH": ("Single", "MACINTOSH"),
+    "CP1250": ("Single", "WINDOWS_1250"),
+    "CP1251": ("Single", "WINDOWS_1251"),
+    "CP1252": ("Single", "WINDOWS_1252"),
+    "CP1253": ("Single", "WINDOWS_1253"),
+    "CP1254": ("Single", "WINDOWS_1254"),
     "CP1255": "Encoding(&WINDOWS_1255_INIT)",
-    "CP1256": "Encoding(&WINDOWS_1256_INIT)",
-    "CP1257": "Encoding(&WINDOWS_1257_INIT)",
+    "CP1256": ("Single", "WINDOWS_1256"),
+    "CP1257": ("Single", "WINDOWS_1257"),
     "CP1258": "Encoding(&WINDOWS_1258_INIT)",
     "UTF-8": "Encoding(&UTF_8_INIT)",
     "UTF-16": "Encoding(&UTF_16LE_INIT)",
@@ -140,6 +144,24 @@ def ucs2_order(name):
     return {b"A": "UCS-2LE", "\u4100".encode(): "UCS-2BE"}[iconv(name, b"A\0")]
 
 
+def single_byte(charset):
+    """The upper half of a single-byte charset: 128 code points, 0 for an
+    invalid byte. The lower half has to be US-ASCII, and the charset
+    has to be stateless."""
+    table = []
+    for b in range(256):
+        out = iconv(charset, bytes([b]))
+        c = ord(out.decode()) if out else 0
+        if b < 0x80 and c != b:
+            sys.exit(f"{charset}: 0x{b:02X} is not US-ASCII")
+        if b >= 0x80:
+            table.append(c)
+    valid = bytes(b for b in range(256) if b < 0x80 or table[b - 0x80])
+    if iconv(charset, valid).decode() != "".join(chr(b) if b < 0x80 else chr(table[b - 0x80]) for b in valid):
+        sys.exit(f"{charset} is not stateless")
+    return table
+
+
 def glibc_version():
     libc = ctypes.CDLL(ctypes.util.find_library("c"))
     libc.gnu_get_libc_version.restype = ctypes.c_char_p
@@ -170,6 +192,7 @@ def main():
         "use encoding_rs::*;",
         "",
         "use super::Converter::{self, *};",
+        "use super::SingleByte;",
         "use crate::iso2022jp::Variant as Jp;",
         "use crate::utf7::Variant as U7;",
         "",
@@ -177,9 +200,26 @@ def main():
         "/// (see [`super::normalize`]) and sorted, with their converters.",
         "pub(super) static NAMES: &[(&[u8], Converter)] = &[",
     ]
+    def rust(c):
+        how = CONVERTERS[c]
+        return how if isinstance(how, str) else f"Single(&{ident(c)})"
+
+    def ident(c):
+        return "".join(x if x.isalnum() else "_" for x in c)
+
     for key in sorted(table):
-        lines.append(f'    (b"{key}", {CONVERTERS[table[key]]}), /* {table[key]} */')
+        lines.append(f'    (b"{key}", {rust(table[key])}), /* {table[key]} */')
     lines.append("];")
+    for c, how in CONVERTERS.items():
+        if isinstance(how, str):
+            continue
+        upper = single_byte(c)
+        lines += ["", f"/// {c}", f"static {ident(c)}: SingleByte = SingleByte {{",
+                  f"    encoding: &{how[1]}_INIT,", "    upper: ["]
+        for row in range(0, 128, 8):
+            lines.append("        " + " ".join(f"0x{x:04X}," for x in upper[row:row + 8])
+                         + f" /* {0x80 + row:02X} */")
+        lines += ["    ],", "};"]
     with open(out, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"{out}: {len(table)} names of {len(CONVERTERS)} converters")

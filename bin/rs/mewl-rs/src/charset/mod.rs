@@ -4,9 +4,13 @@
 //! names for iconv and, for a few others, retries with a superset when
 //! the conversion fails (see [`RENAMED`]). `mewl-rs-compat` does the
 //! same, knowing a name as glibc does: [`glibc::NAMES`] lists the names
-//! glibc knows for each converter emulated. `mewl-rs` knows the names
-//! of the Encoding Standard and, for the converters emulated, those of
-//! glibc as well.
+//! glibc knows for each converter emulated. A single-byte charset is
+//! converted by the table of glibc, and the others by encoding_rs or a
+//! decoder of mewl-rs.
+//!
+//! `mewl-rs` knows the names of the Encoding Standard and, for the
+//! converters emulated, those of glibc as well, and converts a charset
+//! as the Encoding Standard does: a single-byte one by encoding_rs.
 
 mod glibc;
 
@@ -25,6 +29,37 @@ pub enum Converter {
     Iso2022Jp(iso2022jp::Variant),
     /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
     Utf7(utf7::Variant),
+    /// A single-byte charset of glibc, for [`Rules::Glibc`].
+    Single(&'static SingleByte),
+}
+
+/// A single-byte charset of glibc whose lower half is US-ASCII.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SingleByte {
+    /// The encoding of encoding_rs for the charset, for [`Rules::Rfc`].
+    encoding: &'static Encoding,
+    /// The code points of 0x80 to 0xFF, 0 if invalid.
+    upper: [u16; 128],
+}
+
+impl SingleByte {
+    /// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte is
+    /// kept as it is; otherwise it fails.
+    fn convert(&self, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+        let mut out = Vec::with_capacity(input.len() * 2);
+        for &b in input {
+            if b < 0x80 {
+                out.push(b);
+                continue;
+            }
+            match char::from_u32(self.upper[usize::from(b - 0x80)].into()).filter(|&c| c != '\0') {
+                Some(c) => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
+                None if keep_invalid => out.push(b),
+                None => return None,
+            }
+        }
+        Some(out)
+    }
 }
 
 impl Converter {
@@ -41,6 +76,15 @@ impl Converter {
             Converter::Encoding(encoding) => convert(encoding, input, keep_invalid),
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
+            Converter::Single(table) => table.convert(input, keep_invalid),
+        }
+    }
+
+    /// What `mewl-rs` takes a converter of glibc for.
+    fn for_rfc(self) -> Self {
+        match self {
+            Converter::Single(table) => Converter::Encoding(table.encoding),
+            converter => converter,
         }
     }
 }
@@ -100,7 +144,7 @@ impl Charset {
                 if let Some(encoding) = Encoding::for_label_no_replacement(name) {
                     return Some(Charset::Rfc(Converter::Encoding(encoding)));
                 }
-                glibc_converter(name).map(Charset::Rfc)
+                glibc_converter(name).map(|converter| Charset::Rfc(converter.for_rfc()))
             }
         }
     }
@@ -188,6 +232,28 @@ mod tests {
         assert!(glibc::NAMES.iter().all(|(name, _)| normalize(name) == *name));
     }
 
+    fn decode(name: &str, input: &[u8]) -> Option<String> {
+        Charset::for_name(name.as_bytes(), Rules::Glibc)?.convert(input).map(|s| String::from_utf8_lossy(&s).into_owned())
+    }
+
+    #[test]
+    fn single_byte() {
+        /* Latin-1 and US-ASCII are not windows-1252. */
+        assert_eq!(decode("ISO-8859-1", b"caf\xe9 \x80\x9f"), Some("café \u{80}\u{9f}".into()));
+        assert_eq!(decode("latin1", b"\xff"), Some("ÿ".into()));
+        assert_eq!(rfc("latin1").unwrap().convert(b"\x80"), Some("€".into()));
+        assert_eq!(decode("US-ASCII", b"a\xe9b"), Some("a\u{fffd}b".into()));
+        assert_eq!(Charset::for_name(b"us-ascii", Rules::Glibc).unwrap().convert(b"a\xe9b"), Some(b"a\xe9b".to_vec()));
+        /* ISO-8859-9 is not windows-1254, nor TIS-620 windows-874 */
+        assert_eq!(decode("ISO-8859-9", b"\x80\xd0"), Some("\u{80}Ğ".into()));
+        assert_eq!(decode("TIS-620", b"\xa1"), Some("ก".into()));
+        assert_eq!(Charset::for_name(b"TIS620", Rules::Glibc).unwrap().convert(b"\x80"), Some(b"\x80".to_vec()));
+        /* but tis-620, in any case, is retried with CP874 */
+        assert_eq!(decode("TIS-620", b"\x80"), Some("€".into()));
+        /* An undefined byte of windows-125x is invalid. */
+        assert_eq!(Charset::for_name(b"windows-1252", Rules::Glibc).unwrap().convert(b"\x81\x80"), Some(b"\x81\xe2\x82\xac".to_vec()));
+    }
+
     #[test]
     fn glibc_names() {
         let sjis = Some(Converter::Encoding(encoding_rs::SHIFT_JIS));
@@ -225,6 +291,8 @@ mod tests {
             ("TIS620", encoding_rs::WINDOWS_874),
             ("latin9", encoding_rs::ISO_8859_15),
             ("ANSI_X3.4-1968", encoding_rs::WINDOWS_1252),
+            ("iso_8859-1", encoding_rs::WINDOWS_1252),
+            ("koi-8", encoding_rs::KOI8_R),
             ("euc-jp-ms", encoding_rs::EUC_JP),
             ("ms_kanji", encoding_rs::SHIFT_JIS),
         ] {
