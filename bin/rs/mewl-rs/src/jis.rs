@@ -36,6 +36,7 @@
 use encoding_rs::{EUC_JP, Encoding, SHIFT_JIS};
 
 use crate::charset::glibc;
+use crate::charset::patched::decode_with;
 use crate::mime::Rules;
 
 /// The charsets.
@@ -106,36 +107,17 @@ pub fn convert(variant: Variant, rules: Rules, input: &[u8], keep_invalid: bool)
 /// characters of [`jis0208`] in Shift_JIS and EUC-JP, found by walking
 /// the characters as the Encoding Standard does.
 fn convert_rfc(variant: Variant, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
-    let encoding = variant.encoding();
     let patched = matches!(variant, Variant::ShiftJis | Variant::EucJp);
-    let mut out = String::with_capacity(input.len() * 2);
-    let mut beg = 0;
-    let mut pos = 0;
-    while pos < input.len() {
-        let len = char_len(variant, &input[pos..]);
-        let jis = match (variant, input.get(pos..pos + 2)) {
+    decode_with(variant.encoding(), input, keep_invalid, |s| {
+        let len = char_len(variant, s);
+        let jis = match (variant, s.get(..2)) {
             _ if !patched || len != 2 => None,
             (Variant::ShiftJis, Some(&[lead, trail])) => sjis_to_jis(lead, trail),
             (_, Some(&[row, col])) if row >= 0xa1 => Some((row & 0x7f, col & 0x7f)),
             _ => None,
         };
-        if let Some(ch) = jis.and_then(|(b1, b2)| jis0208(b1, b2, Rules::Rfc)) {
-            let (text, invalid) = encoding.decode_without_bom_handling(&input[beg..pos]);
-            if invalid && !keep_invalid {
-                return None;
-            }
-            out.push_str(&text);
-            out.push(ch);
-            beg = pos + len;
-        }
-        pos += len;
-    }
-    let (text, invalid) = encoding.decode_without_bom_handling(&input[beg..]);
-    if invalid && !keep_invalid {
-        return None;
-    }
-    out.push_str(&text);
-    Some(out.into_bytes())
+        (len, jis.and_then(|(b1, b2)| jis0208(b1, b2, Rules::Rfc)))
+    })
 }
 
 /// The length of the character at the beginning of `s`, as far as the

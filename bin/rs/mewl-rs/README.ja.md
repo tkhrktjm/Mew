@@ -56,23 +56,28 @@ difftest/README.ja.md を参照。
 - 昔の日本のメーラが符号化せずに書いた、ヘッダ中の生の ISO-2022-JP を
   UTF-8 に変換する。
 - charset は Encoding Standard の名前か、そうでなければ glibc の名前、
-  たとえば `cp949`、`cp936`、`latin9`、`ujis` で指定でき、Encoding Standard
-  の規定どおりに encoding_rs で変換する。たとえば ISO-8859-1 と US-ASCII は
-  windows-1252 になる。ただし、Shift_JIS、EUC-JP、ISO-2022-JP では、JIS X 0208 の
-  7 文字は Windows のものではなく、Emacs が、したがって Mew が表示する
-  とおり JIS のものである: 0x2141 は "～" (U+FF5E) ではなく "〜" (U+301C)
-  であり、0x2142、0x213D、0x215D、0x2171、0x2172、0x224C も同様である。
-  Shift_JIS と CP932 (`windows-31j`)、EUC-JP と eucJP-ms は glibc と同じ
-  ように区別し、CP932 と eucJP-ms は Emacs と同じく Windows のものの
-  ままである。
-- ISO-2022-JP は、charset の名前にかかわらず、ISO-2022-JP-2 (RFC 1554)
-  のすべての文字集合を知っている。どの文字集合が続くかはエスケープ
-  シーケンスが示すからである: 一部の User-Agent の "Gojō" のような
-  JIS X 0212、GB 2312、KS C 5601、`ESC N` による ISO 8859-1 と 8859-7。
-  ISO-2022-JP-1 (RFC 2237) も知っている。JIS X 0208 は "①" のような
-  Windows の拡張を持つ。知らないエスケープシーケンス、たとえば
-  ISO-2022-JP-3 の JIS X 0213 のものは読み飛ばし、その文字集合の文字は
-  U+FFFD になる。
+  たとえば `cp949`、`cp936`、`latin9`、`ujis`、または Mew の名前
+  (`unicode-1-1-utf-7`) で指定できる。Emacs が Unicode でその文字を持つ
+  限り、Mew が、つまり Emacs が表示するとおりに変換し、それ以外は
+  Encoding Standard の規定どおりに encoding_rs で変換する:
+  - ISO-8859-1、ISO-8859-9、ISO-8859-11、TIS-620 は、Encoding Standard の
+    ような windows-1252、windows-1254、windows-874 ではなく、それ自身で
+    ある: ISO-8859-1 の 0x80 から 0x9F は C1 制御文字である。
+  - Shift_JIS、EUC-JP、ISO-2022-JP では、JIS X 0208 の 7 文字は Windows の
+    ものではなく JIS のものである: 0x2141 は "～" (U+FF5E) ではなく
+    "〜" (U+301C) であり、0x2142、0x213D、0x215D、0x2171、0x2172、0x224C
+    も同様である。Shift_JIS と CP932 (`windows-31j`)、EUC-JP と eucJP-ms は
+    glibc と同じように区別し、CP932 と eucJP-ms は Emacs と同じく Windows
+    のもののままである。
+  - GB 2312 (GBK は除く) は、ISO-2022-JP-2 の中でも、0x2124 と 0x212A に
+    "・" (U+30FB) と "―" (U+2015) を持つ。GB18030 は、Encoding Standard
+    が私用領域とする 6 文字に CJK 統合漢字拡張 B の文字を持つ。EUC-KR は
+    "㉾" (U+327E) を持つ。Big5 (Big5-HKSCS は除く) は 0xF9FE に "▓"
+    (U+2593) を持つ。
+  - Big5 の拡張のほとんどのように Emacs が私用領域の文字を持つところや、
+    JIS X 0208 の NEC 特殊文字のように Unicode の文字を持たないところは、
+    Encoding Standard のとおりである。たとえば "①"。
+  `difftest/mewcheck.py` は、これを Emacs 上の Mew と符号ごとに比べる。
 - encoded-word の charset や生の ISO-2022-JP で不正なバイト列は、
   Encoding Standard と同じく最大部分ごとに一つずつ U+FFFD (REPLACEMENT
   CHARACTER) に置き換える。`mewl` はそのバイトのまま残す。そのため、

@@ -43,8 +43,8 @@ BUILTIN = {
 # The converters emulated, and how: by an encoding of encoding_rs, which
 # is what mewl-rs takes the names for, by a decoder of mewl-rs, or, for
 # a single-byte charset, by the table of glibc (with the encoding of
-# encoding_rs for mewl-rs). CP1255 and CP1258 of glibc compose
-# characters, which a table does not.
+# encoding_rs for mewl-rs, but for those in MEW_TABLES). CP1255 and
+# CP1258 of glibc compose characters, which a table does not.
 CONVERTERS = {
     "ANSI_X3.4-1968": ("Single", "WINDOWS_1252"),
     "ISO-8859-1": ("Single", "WINDOWS_1252"),
@@ -90,19 +90,25 @@ CONVERTERS = {
     "CP932": "Jis(Jis::Cp932)",
     "EUC-JP": "Jis(Jis::EucJp)",
     "EUC-JP-MS": "Jis(Jis::EucJpMs)",
-    "BIG5": "Encoding(&BIG5_INIT)",
+    "BIG5": "Patched(Patch::Big5)",
     "BIG5HKSCS": "Encoding(&BIG5_INIT)",
-    "EUC-CN": "Encoding(&GBK_INIT)",
+    "EUC-CN": "Patched(Patch::Gb2312)",
     "GBK": "Encoding(&GBK_INIT)",
-    "GB18030": "Encoding(&GB18030_INIT)",
-    "EUC-KR": "Encoding(&EUC_KR_INIT)",
-    "UHC": "Encoding(&EUC_KR_INIT)",
+    "GB18030": "Patched(Patch::Gb18030)",
+    "EUC-KR": "Patched(Patch::EucKr)",
+    "UHC": "Patched(Patch::EucKr)",
     "ISO-2022-JP": "Iso2022Jp(Jp::Jp)",
     "ISO-2022-JP-2": "Iso2022Jp(Jp::Jp2)",
     "ISO-2022-JP-3": "Iso2022Jp(Jp::Jp3)",
     "UTF-7": "Utf7(U7::Utf7)",
     "UTF-7-IMAP": "Utf7(U7::Imap)",
 }
+
+
+# The single-byte charsets that mewl-rs converts by the table of glibc,
+# as Mew does, while the Encoding Standard takes them for a superset of
+# Windows.
+MEW_TABLES = ("ISO-8859-1", "ISO-8859-9", "ISO-8859-11", "TIS-620")
 
 
 def normalize(name):
@@ -194,6 +200,7 @@ def main():
         "",
         "use super::Converter::{self, *};",
         "use super::SingleByte;",
+        "use super::patched::Patch;",
         "use crate::iso2022jp::Variant as Jp;",
         "use crate::jis::Variant as Jis;",
         "use crate::utf7::Variant as U7;",
@@ -226,7 +233,8 @@ def main():
             continue
         upper = single_byte(c)
         lines += ["", f"/// {c}", f"static {ident(c)}: SingleByte = SingleByte {{",
-                  f"    encoding: &{how[1]}_INIT,", "    upper: ["]
+                  f"    encoding: &{how[1]}_INIT,", f"    mew: {'true' if c in MEW_TABLES else 'false'},",
+                  "    upper: ["]
         for row in range(0, 128, 8):
             lines.append("        " + " ".join(f"0x{x:04X}," for x in upper[row:row + 8])
                          + f" /* {0x80 + row:02X} */")
