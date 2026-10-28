@@ -2,6 +2,7 @@
 """Compare the decoding of mewl-rs with that of Mew.
 
 Usage: mewcheck.py MEWL-RS [--elisp DIR] [--work DIR] [--charset NAME ...]
+       mewcheck.py MEWL-RS --guess [--locale LOCALE]
 
 mewl-rs decodes a header value for Mew, which shows what it decodes by
 itself: mewcheck.py takes the charsets of Mew's
@@ -18,6 +19,12 @@ them with U+FFFD or decodes them, those that Emacs decodes into
 characters without Unicode, and those that it decodes into characters
 of the Private Use Area or unassigned (by the Unicode of Python) while
 mewl-rs does not.
+
+With --guess, it compares how they guess a charset, both run in LOCALE
+(ja_JP.UTF-8 by default): texts in Japanese and in Latin letters,
+encoded in UTF-8, ISO-2022-JP, EUC-JP, Shift_JIS, ISO-8859-1, and
+windows-1252, and random bytes, each in an encoded-word in a charset
+Mew does not know.
 """
 
 import argparse
@@ -57,6 +64,29 @@ def codes(charset):
     return singles
 
 
+TEXTS = ["日本語", "件名の例です", "Re: 会議の議事録（第2回）", "〜から〜まで", "①②③と㈱", "ｶﾀｶﾅとカタカナ", "表示テスト",
+         "Gojō", "café au lait", "Straße", "naïve résumé", "“quoted” – dash", "abc", "©®", "ー・「」"]
+CODECS = ["utf-8", "iso2022_jp", "euc_jp", "shift_jis", "latin-1", "cp1252"]
+
+
+def guess_inputs():
+    """Texts in several charsets, and random bytes, as bytes."""
+    import random
+    seen = set()
+    for text in TEXTS:
+        for codec in CODECS:
+            try:
+                data = text.encode(codec)
+            except UnicodeEncodeError:
+                continue
+            if data not in seen:
+                seen.add(data)
+                yield data
+    rnd = random.Random(9)
+    for _ in range(1000):
+        yield bytes(rnd.choice([rnd.randrange(0x20, 0x7f), rnd.randrange(0x80, 0x100)]) for _ in range(rnd.randint(1, 6)))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("mewl_rs", help="the mewl-rs binary")
@@ -64,13 +94,18 @@ def main():
     p.add_argument("--work", default=os.path.join(HERE, "work", "mewcheck"), help="where the messages are made")
     p.add_argument("--charset", action="append", help="check only these charsets")
     p.add_argument("--show", type=int, default=5, help="how many differences to print per charset")
+    p.add_argument("--guess", action="store_true", help="compare how they guess a charset")
+    p.add_argument("--locale", default="ja_JP.UTF-8", help="the locale for --guess")
     args = p.parse_args()
 
     emacs = ["emacs", "-Q", "--batch", "-L", args.elisp, "-l", os.path.join(HERE, "mewcheck.el")]
+    env = dict(os.environ, LC_ALL=args.locale, LANG=args.locale) if args.guess else None
     listed = subprocess.run(emacs + ["charsets"], capture_output=True, text=True, check=True).stdout
     charsets = [line.split("\t")[0] for line in listed.splitlines()]
     if args.charset:
         charsets = [c for c in charsets if c in args.charset]
+    if args.guess:
+        charsets = ["x-unknown"]
 
     bindir = os.path.join(args.work, "bin")
     shutil.rmtree(args.work, ignore_errors=True)
@@ -78,7 +113,7 @@ def main():
     os.symlink(os.path.abspath(args.mewl_rs), os.path.join(bindir, "mewl-rs"))
     total = Counter()
     for charset in charsets:
-        inputs = codes(charset)
+        inputs = list(guess_inputs()) if args.guess else codes(charset)
         if inputs is None:
             print(f"{charset}: skipped")
             continue
@@ -90,14 +125,14 @@ def main():
             with open(os.path.join(folder, str(i)), "w") as f:
                 f.write(f"Subject: =?{charset}?B?{word}?=\n\n")
         out = subprocess.run([os.path.join(bindir, "mewl-rs"), "-b", os.path.join(args.work, "Mail"), "-l", "0",
-                              "-d", "subject:", "+c"], capture_output=True, check=True).stdout
+                              "-d", "subject:", "+c"], capture_output=True, check=True, env=env).stdout
         rs = {}
         for line in out.decode("utf-8", "surrogateescape").split("\n"):
             num, _, value = line.partition(": ")
             if num.isdigit():
                 rs[int(num)] = value
         mew = subprocess.run(emacs, input="".join(f"{charset}\t{w}\n" for w in words), capture_output=True,
-                             text=True, check=True).stdout.split("\n")
+                             text=True, check=True, env=env).stdout.split("\n")
         count = Counter()
         diffs = []
         for i, code in enumerate(inputs, 1):

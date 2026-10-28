@@ -42,12 +42,18 @@ impl Fixture {
     /// Runs `mewl-rs`, or it through a link or a copy at `prog`, e.g.
     /// `link/mewl-rs-compat`. `mewl-rs-compat` is short for that.
     fn run(&self, prog: &str, args: &[&str]) -> String {
+        self.run_in("C.UTF-8", prog, args)
+    }
+
+    /// [`Fixture::run`] in `locale`, by which `mewl-rs` guesses charsets.
+    fn run_in(&self, locale: &str, prog: &str, args: &[&str]) -> String {
         let path = match prog {
             "mewl-rs" => PathBuf::from(env!("CARGO_BIN_EXE_mewl-rs")),
             "mewl-rs-compat" => self.dir.join("link/mewl-rs-compat"),
             _ => self.dir.join(prog),
         };
         let out = Command::new(path)
+            .env("LC_ALL", locale)
             .arg("-b")
             .arg(self.dir.join("Mail"))
             .args(args)
@@ -295,4 +301,24 @@ fn options() {
     assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n -x            Use this suffix.\n"));
     assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n<pattern> = 'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>' | '(<pattern>)' \n"));
     assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n<pattern> = 'key=val' | 'key!=val' | '!<pattern>' | '(<pattern>)' \n          | '<pattern>&<pattern>' \n"));
+}
+
+#[test]
+fn guessing_charsets() {
+    let f = Fixture::new("guess");
+    f.write("g/1", b"Subject: \x93\xfa\x96\x7b\x8c\xea\nFrom: \xc6\xfc\xcb\xdc <x@example.com>\n\n");
+    f.write("g/2", b"Subject: =?x-unknown?B?k/qWe4zq?=\n\n");
+    f.write("g/3", b"Subject: =?us-ascii?Q?=93=FA=96=7B?=\n\n");
+    f.write("g/4", b"Subject: =?UTF-8?Q?caf=E9?=\n\n");
+    /* raw Shift_JIS and EUC-JP, Shift_JIS named unknown or US-ASCII, in Japanese */
+    assert_eq!(f.run_in("ja_JP.UTF-8", "mewl-rs", &["-p", "subject=日本", "+g"]), "1\n2\n3\n");
+    assert_eq!(f.run_in("ja_JP.UTF-8", "mewl-rs", &["-p", "from=日本", "+g"]), "1\n");
+    assert_eq!(f.run_in("ja_JP.UTF-8", "mewl-rs", &["-d", "subject:", "+g", "2"]), "2: 日本語\n");
+    /* in another language, ISO-8859-1 if it has no C1 control, which
+    Shift_JIS has and EUC-JP has not, as Emacs */
+    assert_eq!(f.run_in("C.UTF-8", "mewl-rs", &["-p", "subject=日本", "+g"]), "1\n2\n3\n");
+    assert_eq!(f.run_in("C.UTF-8", "mewl-rs", &["-p", "from=Æü", "+g"]), "1\n");
+    assert_eq!(f.run_in("C.UTF-8", "mewl-rs", &["-p", "subject=café", "+g"]), "4\n");
+    /* mewl-rs-compat guesses nothing. */
+    assert_eq!(f.run_in("ja_JP.UTF-8", "mewl-rs-compat", &["-p", "subject=日本", "+g"]), "");
 }

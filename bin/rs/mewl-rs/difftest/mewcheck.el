@@ -21,12 +21,10 @@
   (let (line)
     (while (setq line (ignore-errors (read-from-minibuffer "")))
       (let* ((fields (split-string line "\t"))
-             (charset (car fields))
-             (cs (mew-charset-to-cs charset)))
-        (if (and cs (not (mew-coding-system-p cs)))
+             (str (mew-header-decode (car fields) "B" (cadr fields))))
+        ;; A charset not known is guessed (mew-use-autoconv-when-unknown).
+        (if (equal str mew-error-unknown-charset)
             (princ "U")
-          (princ (mapconcat #'mewcheck-code
-                            (mew-header-decode charset "B" (cadr fields))
-                            " ")))
+          (princ (mapconcat #'mewcheck-code str " ")))
         (terpri)))))
 (setq command-line-args-left nil)

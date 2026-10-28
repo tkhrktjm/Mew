@@ -51,8 +51,19 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   space, as in `Re:=?UTF-8?B?...?=`.
 - Adjacent encoded-words in the same charset are converted together,
   so that a multibyte character split between them is restored.
-- Raw ISO-2022-JP in a header, which old Japanese mailers wrote
-  without encoding, is converted to UTF-8.
+- Where Mew guesses a charset, so does `mewl-rs`: raw text in a
+  header which is not UTF-8, such as ISO-2022-JP or Shift_JIS, which
+  old Japanese mailers wrote without encoding, and an encoded-word in
+  a charset not known, such as `x-unknown`, in US-ASCII with an 8-bit
+  byte, or in UTF-8 with an 8-bit byte between ASCII ones. Emacs
+  guesses by the language environment, and `mewl-rs` by the locale
+  (`LC_ALL`, `LC_CTYPE`, or `LANG`), which Mew passes to it, taking
+  the first that decodes the text: in Japanese, UTF-8, ISO-2022-JP,
+  EUC-JP, and Shift_JIS (of JIS X 0208 and 0212 only); in Korean and
+  Chinese, UTF-8 and EUC-KR, GB 2312, or Big5; otherwise UTF-8,
+  ISO-8859-1 without C1 controls, EUC-JP, and Shift_JIS; and at last
+  ISO-8859-1. Unlike Emacs, it decodes ISO-2022-JP, and guesses
+  US-ASCII with any 8-bit byte, which Mew shows as raw bytes.
 - A charset is named as the Encoding Standard names it, or else as
   glibc does, such as `cp949`, `cp936`, `latin9`, and `ujis`, or as
   Mew does (`unicode-1-1-utf-7`). It is converted as Mew, that is
@@ -82,8 +93,7 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   one for each maximal subpart as the Encoding Standard does, while
   `mewl` keeps the bytes as they are. So a decoded value is always
   UTF-8, and a field with a broken character is still matched with
-  case folding and NFC rather than byte by byte. Raw 8-bit text which
-  is not encoded is left as it is, since its charset is unknown.
+  case folding and NFC rather than byte by byte.
 - UTF-7 and UTF-7-IMAP are converted as RFC 2152 and RFC 3501
   specify, not as glibc does. A shifted sequence (from `+`, or `&`, to
   the end of its base64) is decoded only if it is well-formed as a

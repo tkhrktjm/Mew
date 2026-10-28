@@ -20,8 +20,11 @@
 //!   is not done for ISO-2022-JP, whose encoded-word begins and ends in
 //!   ASCII; joined, an escape sequence right after another one would
 //!   be an error.
-//! - Raw ISO-2022-JP, which old Japanese mailers put in headers without
-//!   encoding, is converted.
+//! - Raw text which is not UTF-8, such as ISO-2022-JP, which old
+//!   Japanese mailers put in headers without encoding, is converted by
+//!   guessing its charset ([`crate::guess`]), and so is an encoded-word
+//!   in a charset not known, in US-ASCII with an 8-bit byte, or in
+//!   UTF-8 with an 8-bit byte between ASCII ones, as Mew does.
 //! - A charset name is that of the Encoding Standard, or else of glibc.
 //! - ISO-2022-JP knows all the sets of ISO-2022-JP-2, e.g. JIS X 0212,
 //!   whatever the charset is named, and ISO-2022-JP-1 is known.
@@ -33,7 +36,7 @@
 //! Otherwise it is the same as [`decode_field`].
 
 use crate::charset::Charset;
-use crate::iso2022jp;
+use crate::guess;
 
 /// How a charset is converted, in particular what is invalid and what
 /// comes of it.
@@ -45,7 +48,6 @@ pub enum Rules {
     Rfc,
 }
 
-const ESC: u8 = 0x1b;
 const DEL: u8 = 0x7f;
 
 /// The max length of a charset name.
@@ -82,14 +84,10 @@ pub fn decode_field(s: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Decodes encoded-words anywhere in a header value (see above).
+/// Decodes encoded-words anywhere in a header value (see above),
+/// guessing the charset of raw text which is not UTF-8.
 pub fn decode_text(s: &[u8]) -> Vec<u8> {
-    if s.contains(&ESC) && s.is_ascii() {
-        let text = iso2022jp::convert(iso2022jp::Variant::Jp, Rules::Rfc, s, true).unwrap_or_default();
-        decode_anywhere(&text)
-    } else {
-        decode_anywhere(s)
-    }
+    decode_anywhere(&guess::guess(s))
 }
 
 /// Decodes each field of a header with [`decode_text`], keeping the
@@ -356,13 +354,14 @@ mod tests {
         assert_eq!(decode_utf8("=?ISO-2022-JP?B?GyRCRnxLXDhsGyhC?=\n =?ISO-2022-JP?B?GyRCJE5GfEtcGyhC?="), "日本語の日本");
         /* The rest is as decode_field(). */
         assert_eq!(decode_utf8("Re: =?UTF-8?B?5pel?=\n (1)"), "Re: 日 (1)");
-        assert_eq!(decode_utf8("=?UTF-8?Q?a=0D=0Ab?= =?UNKNOWN?B?YQ==?="), "ab =?UNKNOWN?B?YQ==?=");
+        assert_eq!(decode_utf8("=?UTF-8?Q?a=0D=0Ab?= =?X-UNKNOWN?B?YQ==?="), "aba");
+        assert_eq!(decode_utf8("=?UTF-8?B?a b?= =?X-UNKNOWN?B?5pel?="), "=?UTF-8?B?a b?= 日");
         assert_eq!(decode_utf8("=?UTF-8?B?a b?="), "=?UTF-8?B?a b?=");
         /* UTF-7 as the RFCs specify. */
         assert_eq!(decode_utf8("=?UTF-7?Q?+ZeVnLIqe-?="), "日本語");
         assert_eq!(decode_utf8("=?UTF-7?Q?+ZeV-?= =?UTF-7?Q?a+ZeU-?="), "+ZeV-a日");
         /* An invalid sequence is replaced with U+FFFD. */
-        assert_eq!(decode_utf8("=?UTF-8?B?/2Fi?="), "\u{fffd}ab");
+        assert_eq!(decode_utf8("=?UTF-8?B?/2Fi?="), "ÿab"); /* guessed, as Mew does */
         assert_eq!(decode_utf8("=?UTF-8?B?5pel5g?="), "日\u{fffd}");
         assert_eq!(decode_utf8("=?UTF-8?B?5pdB?="), "\u{fffd}A");
         assert_eq!(decode_utf8("=?Shift_JIS?B?k/qW?="), "日\u{fffd}");
