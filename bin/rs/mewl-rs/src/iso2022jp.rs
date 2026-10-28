@@ -68,11 +68,6 @@ impl Variant {
             _ => None,
         }
     }
-
-    /// Whether iconv knows it by `rules`.
-    pub fn is_known(self, rules: Rules) -> bool {
-        !(rules == Rules::Glibc && self == Variant::Jp1)
-    }
 }
 
 /// The set designated to G0.
@@ -398,7 +393,6 @@ mod tests {
         assert_eq!(jp(b"Goj\x1b$(D+W\x1b(B"), b"Goj\x1b$(D+W");
         assert_eq!(glibc(Variant::Jp2, b"\x1b$A!$\x1b(B").unwrap(), "\u{30fb}".as_bytes());
         assert_eq!(glibc(Variant::Jp2, b"\x1b$(C\"h\x1b(B").unwrap(), "\u{327e}".as_bytes());
-        assert!(!Variant::Jp1.is_known(Rules::Glibc));
     }
 
     #[test]
