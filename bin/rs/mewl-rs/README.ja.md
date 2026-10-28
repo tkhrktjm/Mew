@@ -133,14 +133,17 @@ iconv 向けに読み替え、`shift_jis` を `CP932` で試すように、変�
 知らない。glibc が知っている名前の一覧 `src/charset/glibc.rs` は
 `tools/glibc-charsets.py` で作る。
 
-charset の変換は iconv ではなく encoding_rs (Encoding Standard) による。
-ただし ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、不正な並びと
-glibc の表も含めて glibc と同じように変換し、このうち ISO-2022-JP だけを
-Windows の表で定義する Encoding Standard には従わない。
+1 バイトの charset は、同じスクリプトが glibc から取り出した glibc の
+表で変換する。そのため ISO-8859-1 は Encoding Standard のような
+windows-1252 ではなく C1 制御文字を持ち、US-ASCII には 0x7F を超える
+バイトがなく、windows-1252 で未定義のバイトは不正である。ほかの charset
+の変換は iconv ではなく encoding_rs (Encoding Standard) による。ただし
+ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、不正な並びと glibc の
+表も含めて glibc と同じように変換し、このうち ISO-2022-JP だけを Windows の
+表で定義する Encoding Standard には従わない。
 たとえば "①" は ISO-2022-JP にはなく、glibc にない ISO-2022-JP-1 は
-復号しない。Unicode の正規化は utf8proc ではなく
-unicode-normalization と caseless による。そのため、`mewl` と結果が
-異なる場合が少しある:
+復号しない。Unicode の正規化は utf8proc ではなく unicode-normalization と
+caseless による。そのため、`mewl` と結果が異なる場合が少しある:
 
 - Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
 - glibc は知っているが encoding_rs と mewl-rs が知らない charset、たとえば

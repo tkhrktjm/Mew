@@ -20,7 +20,7 @@ DIR/home/Mail gets these folders (HOME is DIR/home when mewl runs):
               ISO-2022-JP in a header
   charset     an encoded-word of "mewl" in each of many charset names:
               those of the Encoding Standard, of glibc, of neither, and
-              their spellings
+              their spellings; and texts in single-byte charsets
 
 DIR/cwd gets list1, list2 and list3, the lists for -i, and is where mewl
 runs.
@@ -32,7 +32,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 4
+VERSION = 5
 
 
 def w(path, data):
@@ -244,12 +244,29 @@ utf~8 s!jis SHIFT-JIS ISO-8859_1 latin-1 utf_8 euc_jp Shift_JIS*ja
 """.split()
 
 
+# Texts in single-byte charsets, with bytes where glibc and the
+# Encoding Standard differ, and bytes invalid in either.
+CHARSET_TEXTS = [
+    ("iso-8859-1", b"caf\xe9 \x80\x9f\xa4\xff"), ("latin1", b"\x85\x8a\x9c"), ("us-ascii", b"caf\xe9"),
+    ("ascii", b"a\x80\xff"), ("iso-8859-9", b"\xd0\xdd\xde\xf0\xfd\xfe\x80\x8a"),
+    ("iso-8859-11", b"\xa1\x80\x85\x91\xdb"), ("tis-620", b"\xa1\x80\x85\xa0"), ("TIS620", b"\xa1\x80\xa0"),
+    ("cp874", b"\x80\x81\xa1\xdb"), ("windows-874", b"\x80\x81\x91\xa0"), ("windows-1252", b"\x80\x81\x8d\x9f"),
+    ("windows-1250", b"\x80\x81\x83\x8a"), ("windows-1251", b"\x98\x88\xc0"), ("windows-1253", b"\x81\xaa\xd2\xa2"),
+    ("windows-1254", b"\x80\x8e\xd0\x9e"), ("windows-1256", b"\x81\x90\xc7"), ("windows-1257", b"\x80\xa1\xa5\x8d"),
+    ("koi8-r", b"\xc1\xa3\x9a"), ("koi8-u", b"\xae\xbe\xa4"), ("koi8-ru", b"\x93\x96\xae\xbe"),
+    ("koi-8", b"\x80\xc1\xff\xa3"), ("macintosh", b"\xc6\xf0\xdb\x8e"), ("ibm866", b"\x80\xf0\xff"),
+    ("latin9", b"\xa4\xbd\xe9"), ("iso-8859-8-i", b"\xe0\xfd\xa1"), ("iso-8859-6", b"\xc7\xa1\xbf"),
+]
+
+
 def make_charset(mail):
-    """charset: an encoded-word of "mewl" in each charset name."""
+    """charset: an encoded-word of "mewl" in each charset name, and texts
+    in single-byte charsets."""
     mail = os.path.join(mail, "charset")
     os.makedirs(mail, exist_ok=True)
-    for i, name in enumerate(CHARSET_NAMES, 1):
-        word = b"=?" + name.encode() + b"?B?" + base64.b64encode(b"mewl") + b"?="
+    words = [(name, b"mewl") for name in CHARSET_NAMES] + CHARSET_TEXTS
+    for i, (name, text) in enumerate(words, 1):
+        word = b"=?" + name.encode() + b"?B?" + base64.b64encode(text) + b"?="
         w(f"{mail}/{i}", b"Subject: " + word + b"\nX-Charset: " + name.encode() + b"\nFrom: x@example.com\n\nbody\n")
 
 
