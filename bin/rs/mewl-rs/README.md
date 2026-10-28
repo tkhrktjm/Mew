@@ -47,7 +47,13 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
 - A charset is named as the Encoding Standard names it, or else as
   glibc does, such as `cp949`, `cp936`, `latin9`, and `ujis`, and is
   converted by encoding_rs as the Encoding Standard specifies: e.g.
-  ISO-8859-1 and US-ASCII are windows-1252.
+  ISO-8859-1 and US-ASCII are windows-1252. But in Shift_JIS, EUC-JP,
+  and ISO-2022-JP, seven characters of JIS X 0208 are those of JIS,
+  as Emacs, and so Mew, shows them, not those of Windows: 0x2141 is
+  "〜" (U+301C), not "～" (U+FF5E), and so are 0x2142, 0x213D, 0x215D,
+  0x2171, 0x2172, and 0x224C. Shift_JIS is told from CP932
+  (`windows-31j`) and EUC-JP from eucJP-ms as glibc does, and CP932
+  and eucJP-ms keep those of Windows, as in Emacs.
 - ISO-2022-JP knows every set of ISO-2022-JP-2 (RFC 1554) whatever
   the charset is named, since an escape sequence tells which set
   follows: JIS X 0212 as in "Gojō" of some User-Agent, GB 2312, KS C

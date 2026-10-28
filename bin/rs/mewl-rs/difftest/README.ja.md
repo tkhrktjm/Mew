@@ -58,7 +58,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 | `uni` | 1626 | Unicode の大文字小文字の畳み込みと NFC による pick |
 | `utf7` | 471 | UTF-7 と UTF-7-IMAP の、正しい、および不正な encoded-word に対する pick と sort |
 | `iso2022jp` | 252 | ISO-2022-JP とその変種の encoded-word、および生の ISO-2022-JP に対する pick と sort |
-| `charset` | 329 | 179 個の charset 名 (Encoding Standard の名前、glibc の名前、その両方、どちらでもないもの、glibc が正規化した綴り) それぞれの encoded-word、26 の 1 バイト charset のテキスト、Shift_JIS と EUC-JP とその変種の 11 のテキストに対する pick と sort |
+| `charset` | 331 | 179 個の charset 名 (Encoding Standard の名前、glibc の名前、その両方、どちらでもないもの、glibc が正規化した綴り) それぞれの encoded-word、26 の 1 バイト charset のテキスト、Shift_JIS と EUC-JP とその変種の 11 のテキストに対する pick と sort |
 | `wellformed` | 3000 | 空のフォルダに対する、正しい形の pick のパターン |
 
 `--corpus-a` と `--corpus-b` は、修正の影響を見分けるために、バイナリ
@@ -76,7 +76,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 ## 期待される結果
 
 iconv と utf8proc 2.10 付きで (`--enable-utf8proc-char-fold` なしで)
-ビルドした 464013a の C 版 mewl に対して、mewl-rs-compat は 7901 ケース
+ビルドした 464013a の C 版 mewl に対して、mewl-rs-compat は 7903 ケース
 中 15 ケースで異なる。どれも `charset` スイートにあり、../README.ja.md に
 書いた既知の違いによる。glibc は知っているが mewl-rs は知らない charset
 (UTF-32、UCS-4、JOHAB、ISO-2022-KR、ISO-2022-CN、EBCDIC) の
@@ -85,7 +85,7 @@ encoded-word と、`mewl` が最後の文字を失う windows-1258 である。
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7901 run, 15 mismatches
+TOTAL: 7903 run, 15 mismatches
 ```
 
 コーパスには UTF-7 の単独の下位サロゲートがない。mewl-rs はこれを不正と
@@ -147,11 +147,16 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | `./difftest.py rs/17 rs/18 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7901 run, 35 mismatches: +mime/6 で 12、`+charset` の 8 つのテキストで 23 |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7901 run, 0 mismatches |
 
+| 19. take seven characters of JIS X 0208 as Emacs does in mewl-rs | `./difftest.py C-464013a rs/19 --name-b mewl-rs-compat` | 7903 run, 15 mismatches、すべて `+charset` |
+| | `./difftest.py rs/18 rs/19 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 61 mismatches: +mime/6 で 20、+iso2022jp/4 で 26、`+charset` の 8 つのテキストで 15 |
+
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
 `+charset` を加えて作り直して 7572 が 7585 に、手順 17 で `+charset` に
 テキストを加えて 7880 に、手順 18 で Shift_JIS と EUC-JP のテキストを
-加えて 7901 になる。
+加えて 7901 に、手順 19 でそれに 0x213D を加えて 7903 になる。手順 16 から
+18 の行は、それぞれの手順のコーパスによる。
 
 mewl-rs-compat が変わるのは、main に従う手順 4、8、14、UTF-7 と
 ISO-2022-JP を復号する手順 10 と 15、charset 名を知り、1 バイト charset

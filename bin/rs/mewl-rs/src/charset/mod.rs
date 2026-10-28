@@ -12,10 +12,12 @@
 //! `mewl-rs` knows the names of the Encoding Standard and, for the
 //! converters emulated, those of glibc as well, and converts a charset
 //! as the Encoding Standard does: a single-byte one by encoding_rs.
+//! Shift_JIS and EUC-JP, told from CP932 and eucJP-ms as glibc does,
+//! have the six characters of JIS X 0208 as Emacs does ([`crate::jis`]).
 
 pub mod glibc;
 
-use encoding_rs::{DecoderResult, Encoding};
+use encoding_rs::{DecoderResult, EUC_JP, Encoding, SHIFT_JIS};
 
 use crate::iso2022jp;
 use crate::jis;
@@ -33,7 +35,7 @@ pub enum Converter {
     Utf7(utf7::Variant),
     /// A single-byte charset of glibc, for [`Rules::Glibc`].
     Single(&'static SingleByte),
-    /// Shift_JIS, EUC-JP, or a variant of glibc, for [`Rules::Glibc`].
+    /// Shift_JIS, EUC-JP, or a variant.
     Jis(jis::Variant),
 }
 
@@ -81,7 +83,7 @@ impl Converter {
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
             Converter::Single(table) => table.convert(input, keep_invalid),
-            Converter::Jis(variant) => jis::convert(variant, input, keep_invalid),
+            Converter::Jis(variant) => jis::convert(variant, rules, input, keep_invalid),
         }
     }
 
@@ -89,7 +91,6 @@ impl Converter {
     fn for_rfc(self) -> Self {
         match self {
             Converter::Single(table) => Converter::Encoding(table.encoding),
-            Converter::Jis(variant) => Converter::Encoding(variant.encoding()),
             converter => converter,
         }
     }
@@ -147,10 +148,20 @@ impl Charset {
                 if let Some(variant) = utf7::Variant::for_charset(name) {
                     return Some(Charset::Rfc(Converter::Utf7(variant)));
                 }
-                if let Some(encoding) = Encoding::for_label_no_replacement(name) {
-                    return Some(Charset::Rfc(Converter::Encoding(encoding)));
+                /* Shift_JIS or CP932, which the Encoding Standard does not tell apart */
+                let converter = glibc_converter(name);
+                if let Some(converter @ Converter::Jis(_)) = converter {
+                    return Some(Charset::Rfc(converter));
                 }
-                glibc_converter(name).map(|converter| Charset::Rfc(converter.for_rfc()))
+                if let Some(encoding) = Encoding::for_label_no_replacement(name) {
+                    let converter = match encoding {
+                        e if e == SHIFT_JIS => Converter::Jis(jis::Variant::ShiftJis),
+                        e if e == EUC_JP => Converter::Jis(jis::Variant::EucJp),
+                        e => Converter::Encoding(e),
+                    };
+                    return Some(Charset::Rfc(converter));
+                }
+                converter.map(|converter| Charset::Rfc(converter.for_rfc()))
             }
         }
     }
@@ -300,12 +311,23 @@ mod tests {
             ("ANSI_X3.4-1968", encoding_rs::WINDOWS_1252),
             ("iso_8859-1", encoding_rs::WINDOWS_1252),
             ("koi-8", encoding_rs::KOI8_R),
-            ("euc-jp-ms", encoding_rs::EUC_JP),
-            ("ms_kanji", encoding_rs::SHIFT_JIS),
         ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Encoding(encoding))), "{name}");
         }
         assert_eq!(rfc("UTF-32"), None);
+        /* Shift_JIS and EUC-JP, told from CP932 and eucJP-ms */
+        for (name, variant) in [
+            ("shift_jis", jis::Variant::ShiftJis),
+            ("ms_kanji", jis::Variant::ShiftJis),
+            ("x-sjis", jis::Variant::ShiftJis),
+            ("windows-31j", jis::Variant::Cp932),
+            ("cp932", jis::Variant::Cp932),
+            ("euc-jp", jis::Variant::EucJp),
+            ("x-euc-jp", jis::Variant::EucJp),
+            ("euc-jp-ms", jis::Variant::EucJpMs),
+        ] {
+            assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Jis(variant))), "{name}");
+        }
     }
 
     #[test]

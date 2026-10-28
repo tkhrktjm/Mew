@@ -32,7 +32,9 @@
 //! For `mewl-rs`, every set of ISO-2022-JP-2 is known whatever the
 //! charset is named, since an escape sequence tells which set follows.
 //! The tables are those of encoding_rs, so JIS X 0208 has the
-//! extensions of Windows, e.g. the NEC special characters; but GB 2312
+//! extensions of Windows, e.g. the NEC special characters, but seven
+//! characters are those of JIS as Emacs takes them, e.g. 0x2141 is
+//! U+301C as for glibc ([`crate::jis::jis0208`]); GB 2312
 //! is not extended to GBK, and KS C 5601 has U+327E of KS X 1001:2002,
 //! as glibc does. What is invalid is replaced with U+FFFD: a byte with
 //! the top bit set, a character not in its set, and an escape sequence
@@ -243,14 +245,12 @@ impl Decoder {
     }
 
     fn jis0208(&self, b1: u8, b2: u8) -> Option<char> {
-        if self.glibc() {
-            /* the NEC special characters and the IBM extensions */
-            if b1 == 0x2d || b1 >= 0x75 {
-                return None;
-            }
-            return jis::jis0208(b1, b2).or_else(|| one(EUC_JP, &[b1 | 0x80, b2 | 0x80]));
+        /* the NEC special characters and the IBM extensions */
+        if self.glibc() && (b1 == 0x2d || b1 >= 0x75) {
+            return None;
         }
-        one(EUC_JP, &[b1 | 0x80, b2 | 0x80])
+        /* as JIS for glibc and Emacs, not as Windows */
+        jis::jis0208(b1, b2, self.rules).or_else(|| one(EUC_JP, &[b1 | 0x80, b2 | 0x80]))
     }
 
     fn gb2312(&self, b1: u8, b2: u8) -> Option<char> {
@@ -395,7 +395,8 @@ mod tests {
         /* Whatever the charset, with the extensions of Windows. */
         assert_eq!(rfc(b"Goj\x1b$(D+W\x1b(B"), "Gojō");
         assert_eq!(rfc(b"\x1b$B-!\x1b(B"), "①");
-        assert_eq!(rfc(b"\x1b$B!A\x1b(B"), "\u{ff5e}");
+        assert_eq!(rfc(b"\x1b$B!A!=\x1b(B"), "\u{301c}\u{2014}");
+        assert_eq!(glibc(Variant::Jp, b"\x1b$B!=\x1b(B").unwrap(), "\u{2015}".as_bytes());
         /* JIS X 0213, not known, as a whole. */
         assert_eq!(rfc(b"a\x1b$(Q.!.\"\x1b(Bb"), "a\u{fffd}\u{fffd}\u{fffd}b");
         assert_eq!(rfc(b"\x1b$BF|\xff\x1b(B"), "日\u{fffd}");
