@@ -58,6 +58,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 | `uni` | 1626 | Unicode の大文字小文字の畳み込みと NFC による pick |
 | `utf7` | 471 | UTF-7 と UTF-7-IMAP の、正しい、および不正な encoded-word に対する pick と sort |
 | `iso2022jp` | 252 | ISO-2022-JP とその変種の encoded-word、および生の ISO-2022-JP に対する pick と sort |
+| `charset` | 13 | 179 個の charset 名 (Encoding Standard の名前、glibc の名前、その両方、どちらでもないもの、glibc が正規化した綴り) それぞれの encoded-word に対する pick と sort |
 | `wellformed` | 3000 | 空のフォルダに対する、正しい形の pick のパターン |
 
 `--corpus-a` と `--corpus-b` は、修正の影響を見分けるために、バイナリ
@@ -75,15 +76,20 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 ## 期待される結果
 
 iconv と utf8proc 2.10 付きで (`--enable-utf8proc-char-fold` なしで)
-ビルドした 464013a の C 版 mewl に対して、mewl-rs-compat は 7572 ケース
-中 12 ケースで異なる。どれも `mime` スイートにあり、理由は一つである。
-charset は iconv ではなく encoding_rs で変換するので、Shift_JIS の 0x8160
-("〜") は U+301C ではなく U+FF5E になる。
+ビルドした 464013a の C 版 mewl に対して、mewl-rs-compat は 7585 ケース
+中 23 ケースで異なる。どれも ../README.ja.md に書いた既知の違いによる:
+
+- `mime` スイートで 12: charset は iconv ではなく encoding_rs で変換する
+  ので、Shift_JIS の 0x8160 ("〜") は U+301C ではなく U+FF5E になる
+  (+mime/6)。
+- `charset` スイートで 11: glibc は知っているが mewl-rs は知らない
+  charset (UTF-32、UCS-4、JOHAB、ISO-2022-KR、ISO-2022-CN、EBCDIC) の
+  encoded-word と、`mewl` が最後の文字を失う windows-1258。
 
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7572 run, 12 mismatches
+TOTAL: 7585 run, 23 mismatches
 ```
 
 コーパスには UTF-7 の単独の下位サロゲートがない。mewl-rs はこれを不正と
@@ -133,10 +139,15 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | `./difftest.py rs/14 rs/15 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7572 run, 66 mismatches、すべて `+iso2022jp` |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7572 run, 74 mismatches、すべて `+iso2022jp` |
 
-手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
-作り直し、7320 ケースの件数は 7572 ケースの件数になる。
+| 16. know charset names as glibc does | `./difftest.py C-464013a rs/16 --name-b mewl-rs-compat` | 7585 run, 23 mismatches: `+mime` で 12、`+charset` で 11 |
+| | `./difftest.py rs/15 rs/16 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7585 run, 11 mismatches、すべて `+charset`: glibc が知らない Encoding Standard の 46 の名前と、glibc の 22 の名前 |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7585 run, 12 mismatches、すべて `+charset`: glibc の 22 の名前 |
 
-mewl-rs-compat が変わるのは、main に従う手順 4、8、14 と、UTF-7 と
-ISO-2022-JP を復号する手順 10 と 15 だけである。それ以外の手順では前と
-同じで、たとえば、ともに mewl-rs-compat として起動した rs/6 と rs/7 の
-間の不一致は 0 である。
+手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
+作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
+`+charset` を加えて作り直して 7572 が 7585 になる。
+
+mewl-rs-compat が変わるのは、main に従う手順 4、8、14、UTF-7 と
+ISO-2022-JP を復号する手順 10 と 15、glibc と同じように charset 名を知る
+手順 16 だけである。それ以外の手順では前と同じで、たとえば、ともに
+mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は 0 である。

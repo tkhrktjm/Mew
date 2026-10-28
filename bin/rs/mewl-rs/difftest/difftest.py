@@ -22,6 +22,10 @@ Suites (--suite, all but wellformed by default):
   mime       pick and sort on encoded-words (folder +mime)
   uni        pick with Unicode case folding and NFC (folder +uni)
   utf7       pick and sort on encoded-words in UTF-7 (folder +utf7)
+  iso2022jp  pick and sort on encoded-words in ISO-2022-JP and its
+             variants, and on raw ISO-2022-JP (folder +iso2022jp)
+  charset    pick on encoded-words in many charset names, to see which
+             names are known (folder +charset)
   wellformed 3000 well-formed pick patterns on an empty folder, to see
              that two parsers accept and refuse the same ones
 
@@ -47,7 +51,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SUITES = ("base", "mime", "uni", "utf7", "iso2022jp", "wellformed")
+SUITES = ("base", "mime", "uni", "utf7", "iso2022jp", "charset", "wellformed")
 
 
 def make_variant(corpus, work, kind):
@@ -268,6 +272,13 @@ def suite_iso2022jp(r):
         r.check(["-d", k, "+iso2022jp"])
 
 
+def suite_charset(r):
+    for v in ["mewl", "MEWL", "mew", "=?"]:
+        for op in ["=", "==", "!="]:
+            r.check(["-p", f'subject{op}"{v}"', "+charset"])
+    r.check(["-d", "subject:", "+charset"])
+
+
 TOKENS = ["subject", "from", "head", "references", "to", "x-foo", "=", "==", "!=", "!==", "!", "&", "&&", "|", "||",
           "(", ")", "foo", "FOO", "bar", "\"a b\"", "\\(", "\"", "\\", " ", "<id@x>", "あ", "\udce3", "\udcff",
           "\udc81x", "xあ", ".", "", "=foo", "subject=", "x", "\t"]
@@ -313,7 +324,7 @@ def main():
     p.add_argument("--name-b", default="mewl", help="the name B is invoked as")
     p.add_argument("--corpus-a", default="orig", choices=("orig", "lf", "lfdot", "clean"))
     p.add_argument("--corpus-b", default="orig", choices=("orig", "lf", "lfdot", "clean"))
-    p.add_argument("--suite", default="base,mime,uni,utf7,iso2022jp", help="comma-separated: " + ", ".join(SUITES))
+    p.add_argument("--suite", default="base,mime,uni,utf7,iso2022jp,charset", help="comma-separated: " + ", ".join(SUITES))
     p.add_argument("--seed", type=int, default=1, help="seed of the fuzzed patterns in base")
     p.add_argument("--work", default=os.path.join(HERE, "work"), help="where the corpus is made")
     p.add_argument("--dump", help="append the mismatches to this file as JSON lines")
@@ -326,7 +337,8 @@ def main():
 
     r = Runner(args)
     for name, fn in (("base", suite_base), ("mime", suite_mime), ("uni", suite_uni), ("utf7", suite_utf7),
-                     ("iso2022jp", suite_iso2022jp), ("wellformed", suite_wellformed)):
+                     ("iso2022jp", suite_iso2022jp), ("charset", suite_charset),
+                     ("wellformed", suite_wellformed)):
         if name in suites:
             before = (r.total, r.mismatches)
             fn(r)

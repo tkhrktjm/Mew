@@ -15,6 +15,7 @@
 //! or `mewl` through a link, it is the same as mewl (see [`Flavor`]).
 
 mod bytes;
+mod charset;
 mod cli;
 mod compat;
 mod error;

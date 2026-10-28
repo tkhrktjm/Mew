@@ -46,6 +46,10 @@ difftest/README.ja.md を参照。
   その間で分割されたマルチバイト文字も元に戻る。
 - 昔の日本のメーラが符号化せずに書いた、ヘッダ中の生の ISO-2022-JP を
   UTF-8 に変換する。
+- charset は Encoding Standard の名前か、そうでなければ glibc の名前、
+  たとえば `cp949`、`cp936`、`latin9`、`ujis` で指定でき、Encoding Standard
+  の規定どおりに encoding_rs で変換する。たとえば ISO-8859-1 と US-ASCII は
+  windows-1252 になる。
 - ISO-2022-JP は、charset の名前にかかわらず、ISO-2022-JP-2 (RFC 1554)
   のすべての文字集合を知っている。どの文字集合が続くかはエスケープ
   シーケンスが示すからである: 一部の User-Agent の "Gojō" のような
@@ -120,6 +124,15 @@ Mew の変更を要するバグは直していない。たとえば、Mew は `m
   正しい UTF-8 でなければ、ASCII 文字の大文字小文字だけを区別せずに
   バイトごとに比べる。キー `head` はそのまま比べる。
 
+charset の名前は、glibc 付きの `mewl` と同じように解釈する。`mewl` は
+`ks_c_5601-1987` を `CP949` にするように、いくつかの MIME の charset 名を
+iconv 向けに読み替え、`shift_jis` を `CP932` で試すように、変換に失敗した
+ときにいくつかを上位集合で再試行する。glibc は名前の大文字小文字と、
+英字、数字、`_-.,:` 以外の文字を無視するので、`utf~8` は UTF-8 である。
+また、`x-sjis` や `gb_2312` のような Encoding Standard の名前の一部を
+知らない。glibc が知っている名前の一覧 `src/charset/glibc.rs` は
+`tools/glibc-charsets.py` で作る。
+
 charset の変換は iconv ではなく encoding_rs (Encoding Standard) による。
 ただし ISO-2022-JP、ISO-2022-JP-2、UTF-7、UTF-7-IMAP は、不正な並びと
 glibc の表も含めて glibc と同じように変換し、このうち ISO-2022-JP だけを
@@ -130,8 +143,15 @@ unicode-normalization と caseless による。そのため、`mewl` と結果�
 異なる場合が少しある:
 
 - Shift_JIS の 0x8160 ("〜") は U+FF5E になるが、glibc では U+301C である。
-- Encoding Standard が知らず UTF-7 でもない charset、たとえば UTF-32 の
-  encoded-word は復号しない。
+- glibc は知っているが encoding_rs と mewl-rs が知らない charset、たとえば
+  UTF-32、UCS-4、ISO-2022-KR、ISO-2022-CN、JOHAB、EBCDIC の encoded-word は
+  復号しない。
+- UTF-16 と UCS-2 は UTF-16LE として扱い (UCS-2BE は UTF-16BE)、glibc が
+  UTF-16 で読み取り、次の encoded-word まで持ち越すらしいバイト順マークは
+  扱わない。
+- windows-1255 と windows-1258 は glibc の合成なしで変換する。`mewl` は
+  iconv を flush しないので、後に続くものと合成されうる encoded-word の
+  最後の文字を失う。"café" は "caf" になる。
 - ISO-2022-JP-3 は ISO-2022-JP として変換し、glibc が知っている
   JIS X 0213 と JIS X 0201 のカタカナは扱わない。
 - UTF-7 中の対にならない下位サロゲートは、それを補う文字を不正にする。

@@ -7,12 +7,9 @@
 //! characters but TAB are removed from what is decoded. A word that is
 //! not a valid encoded-word, or in an unknown charset, is kept as is.
 //!
-//! mewl converts charsets with iconv while this uses encoding_rs (the
-//! Encoding Standard), so a few characters may be converted
-//! differently, e.g. 0x8160 of Shift_JIS is U+301C by glibc but U+FF5E
-//! here. ISO-2022-JP and ISO-2022-JP-2 are converted by
-//! [`crate::iso2022jp`] and UTF-7, unknown to the Encoding Standard, by
-//! [`crate::utf7`] as glibc does.
+//! mewl converts charsets with iconv. [`crate::charset`] knows a
+//! charset name as mewl with glibc does and converts it as glibc does
+//! as far as it can (see there).
 //!
 //! [`decode_text`] is for `mewl-rs` (not `mewl-rs-compat`) and more
 //! lenient:
@@ -25,6 +22,7 @@
 //!   be an error.
 //! - Raw ISO-2022-JP, which old Japanese mailers put in headers without
 //!   encoding, is converted.
+//! - A charset name is that of the Encoding Standard, or else of glibc.
 //! - ISO-2022-JP knows all the sets of ISO-2022-JP-2, e.g. JIS X 0212,
 //!   whatever the charset is named, and ISO-2022-JP-1 is known.
 //! - An invalid byte sequence in a charset is replaced with U+FFFD, as
@@ -34,10 +32,8 @@
 //!
 //! Otherwise it is the same as [`decode_field`].
 
-use encoding_rs::{DecoderResult, Encoding, SHIFT_JIS};
-
+use crate::charset::Charset;
 use crate::iso2022jp;
-use crate::utf7;
 
 /// How a charset is converted, in particular what is invalid and what
 /// comes of it.
@@ -155,7 +151,7 @@ fn decode_anywhere(s: &[u8]) -> Vec<u8> {
 
 fn flush(out: &mut Vec<u8>, word: Option<Word>) {
     if let Some(word) = word {
-        word.convert_into(out, Rules::Rfc);
+        word.convert_into(out);
     }
 }
 
@@ -176,64 +172,8 @@ fn find_word(s: &[u8]) -> Option<(usize, Word)> {
 /// `false` (and nothing appended) if `word` is not an encoded-word.
 fn decode_word(word: &[u8], out: &mut Vec<u8>) -> bool {
     match Word::parse(word, Rules::Glibc) {
-        Some(word) => word.convert_into(out, Rules::Glibc),
+        Some(word) => word.convert_into(out),
         None => false,
-    }
-}
-
-/// A charset of an encoded-word that can be converted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Charset {
-    /// By encoding_rs.
-    Encoding(&'static Encoding),
-    /// ISO-2022-JP and its variants.
-    Iso2022Jp(iso2022jp::Variant),
-    /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
-    Utf7(utf7::Variant),
-}
-
-impl Charset {
-    /// The charset for a MIME charset name, if known by `rules`.
-    fn for_name(name: &[u8], rules: Rules) -> Option<Self> {
-        if let Some(variant) = iso2022jp::Variant::for_charset(name) {
-            return variant.is_known(rules).then_some(Charset::Iso2022Jp(variant));
-        }
-        if let Some(variant) = utf7::Variant::for_charset(name) {
-            return Some(Charset::Utf7(variant));
-        }
-        if let Some(encoding) = Encoding::for_label_no_replacement(name) {
-            return Some(Charset::Encoding(encoding));
-        }
-        /* Names known to iconv but not to the Encoding Standard. */
-        match name.to_ascii_lowercase().as_slice() {
-            b"cp932" | b"ms932" => Some(Charset::Encoding(SHIFT_JIS)),
-            _ => None,
-        }
-    }
-
-    /// Whether adjacent encoded-words in this charset may be converted
-    /// together. Not for a stateful charset whose encoded-word begins
-    /// and ends in its initial state, ISO-2022-JP and UTF-7: joined, a
-    /// shift right after another one would be an error.
-    fn joinable(self) -> bool {
-        !matches!(self, Charset::Iso2022Jp(_) | Charset::Utf7(_))
-    }
-
-    /// Converts `input` to UTF-8, ISO-2022-JP and UTF-7 by `rules`. With
-    /// `keep_invalid`, an invalid byte sequence is kept as it is by
-    /// [`Rules::Glibc`], as mewl does, and replaced with U+FFFD by
-    /// [`Rules::Rfc`] but an invalid sequence of UTF-7 in US-ASCII;
-    /// otherwise it fails.
-    fn convert(self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
-        match self {
-            Charset::Encoding(encoding) if keep_invalid && rules == Rules::Rfc => {
-                let (text, _) = encoding.decode_without_bom_handling(input);
-                Some(text.into_owned().into_bytes())
-            }
-            Charset::Encoding(encoding) => convert(encoding, input, keep_invalid),
-            Charset::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
-            Charset::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
-        }
     }
 }
 
@@ -275,12 +215,10 @@ impl Word {
         Some(Word { charset, bytes })
     }
 
-    /// Converts to UTF-8, UTF-7 by `rules`, and appends it to `out`.
-    /// `false` (and nothing appended) if it fails.
-    fn convert_into(self, out: &mut Vec<u8>, rules: Rules) -> bool {
-        let charset = self.charset;
-        let converted = charset.convert(&self.bytes, rules, false).or_else(|| charset.convert(&self.bytes, rules, true));
-        let Some(text) = converted else {
+    /// Converts to UTF-8 and appends it to `out`. `false` (and nothing
+    /// appended) if it fails.
+    fn convert_into(self, out: &mut Vec<u8>) -> bool {
+        let Some(text) = self.charset.convert(&self.bytes) else {
             return false;
         };
         /* Control characters but TAB are removed as Mew does. */
@@ -292,33 +230,6 @@ impl Word {
 /// A character of `token` of RFC 2047, with `\` of erratum 506.
 fn is_token(c: u8) -> bool {
     c > b' ' && c < DEL && !b"()<>@,;:\\\"/[]?.=".contains(&c)
-}
-
-/// Converts `input` to UTF-8 by encoding_rs. With `keep_invalid`, an
-/// invalid byte sequence is kept as it is; otherwise it fails.
-fn convert(encoding: &'static Encoding, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
-    let mut decoder = encoding.new_decoder_without_bom_handling();
-    let size = decoder.max_utf8_buffer_length_without_replacement(input.len())?;
-    let mut buf = vec![0; size];
-    let mut out = Vec::with_capacity(size);
-    let mut src = input;
-    loop {
-        let (result, read, written) = decoder.decode_to_utf8_without_replacement(src, &mut buf, true);
-        out.extend_from_slice(&buf[..written]);
-        match result {
-            DecoderResult::InputEmpty => return Some(out),
-            DecoderResult::OutputFull => unreachable!("the buffer is large enough"),
-            DecoderResult::Malformed(bad, extra) => {
-                if !keep_invalid {
-                    return None;
-                }
-                let end = read.saturating_sub(extra.into());
-                let beg = end.saturating_sub(bad.into());
-                out.extend_from_slice(&src[beg..end]);
-                src = &src[read..];
-            }
-        }
-    }
 }
 
 /// The "B" encoding. Missing or extra padding of a buggy client is

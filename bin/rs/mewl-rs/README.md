@@ -44,6 +44,10 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
   so that a multibyte character split between them is restored.
 - Raw ISO-2022-JP in a header, which old Japanese mailers wrote
   without encoding, is converted to UTF-8.
+- A charset is named as the Encoding Standard names it, or else as
+  glibc does, such as `cp949`, `cp936`, `latin9`, and `ujis`, and is
+  converted by encoding_rs as the Encoding Standard specifies: e.g.
+  ISO-8859-1 and US-ASCII are windows-1252.
 - ISO-2022-JP knows every set of ISO-2022-JP-2 (RFC 1554) whatever
   the charset is named, since an escape sequence tells which set
   follows: JIS X 0212 as in "Gojō" of some User-Agent, GB 2312, KS C
@@ -123,18 +127,35 @@ output, and options are the same as `mewl`'s (see `mewl(1)`). As
   byte, ignoring the case of ASCII letters only. The key `head` is
   compared as it is.
 
+A charset is named as `mewl` with glibc names it. `mewl` renames a
+few MIME charset names for iconv, such as `ks_c_5601-1987` to `CP949`,
+and retries a few with a superset when the conversion fails, such as
+`shift_jis` with `CP932`. glibc ignores the case of a name and the
+characters in it but letters, digits, and `_-.,:`, so that `utf~8` is
+UTF-8, and does not know some names of the Encoding Standard, such as
+`x-sjis` and `gb_2312`. `tools/glibc-charsets.py` makes the list of the
+names glibc knows, `src/charset/glibc.rs`.
+
 Charsets are converted by encoding_rs (the Encoding Standard), not by
 iconv; ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted
 as glibc does, invalid sequences and the tables of glibc included, not
 as the Encoding Standard, which knows only ISO-2022-JP, with the table
 of Windows: e.g. "①" is not in ISO-2022-JP, and ISO-2022-JP-1, which
-glibc lacks, is not decoded. Unicode
-is normalized by unicode-normalization and caseless, not by utf8proc.
-So a few results differ from `mewl`'s:
+glibc lacks, is not decoded.
+Unicode is normalized by unicode-normalization and caseless, not by
+utf8proc. So a few results differ from `mewl`'s:
 
 - 0x8160 of Shift_JIS ("〜") is U+FF5E, while glibc gives U+301C.
-- An encoded-word in a charset unknown to the Encoding Standard and
-  not UTF-7, such as UTF-32, is not decoded.
+- An encoded-word in a charset which glibc knows but encoding_rs and
+  mewl-rs do not, such as UTF-32, UCS-4, ISO-2022-KR, ISO-2022-CN,
+  JOHAB, and EBCDIC, is not decoded.
+- UTF-16 and UCS-2 are UTF-16LE (UCS-2BE is UTF-16BE), without the
+  byte order mark which glibc takes for UTF-16 and seems to keep for
+  the next encoded-words.
+- windows-1255 and windows-1258 are converted without the composition
+  of glibc, by which `mewl` loses the last character of an
+  encoded-word that may be composed with what follows, as it never
+  flushes iconv: "café" is "caf".
 - ISO-2022-JP-3 is converted as ISO-2022-JP, without JIS X 0213 and
   the Katakana of JIS X 0201, which glibc knows.
 - A lone low surrogate in UTF-7 makes the character completing it

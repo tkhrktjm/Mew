@@ -16,6 +16,11 @@ DIR/home/Mail gets these folders (HOME is DIR/home when mewl runs):
   utf7        encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid
               but without a lone low surrogate, which glibc handles in
               a way not followed
+  iso2022jp   encoded-words in ISO-2022-JP and its variants, and raw
+              ISO-2022-JP in a header
+  charset     an encoded-word of "mewl" in each of many charset names:
+              those of the Encoding Standard, of glibc, of neither, and
+              their spellings
 
 DIR/cwd gets list1, list2 and list3, the lists for -i, and is where mewl
 runs.
@@ -27,7 +32,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 3
+VERSION = 4
 
 
 def w(path, data):
@@ -214,6 +219,40 @@ def make_iso2022jp(mail):
         w(f"{mail}/{i}", b"Subject: raw\nUser-Agent: " + text + b"\nFrom: x@example.com\n\nbody\n")
 
 
+# Charset names: of the Encoding Standard but not of glibc, of glibc but
+# not of the Encoding Standard, of both, of neither, renamed by mewl, and
+# spelled as glibc normalizes them.
+CHARSET_NAMES = """
+csbig5 x-x-big5 x-euc-jp csksc56011987 iso-ir-149 korean ks_c_5601-1987 ks_c_5601-1989 ksc5601 ksc_5601
+windows-949 chinese csiso58gb231280 gb_2312 gb_2312-80 iso-ir-58 x-gbk csisolatin9 l9 csiso88596e
+csiso88596i iso-8859-6-e iso-8859-6-i sun_eu_greek csiso88598i iso-8859-8-i logical csiso88598e
+iso-8859-8-e visual koi koi8_r x-sjis unicodefffe iso-10646-ucs-2 unicodefeff unicode-1-1-utf-8
+unicode11utf8 unicode20utf8 x-unicode20utf8 x-mac-roman x-cp1250 x-cp1252 x-cp1258 dos-874
+x-mac-cyrillic x-mac-ukrainian x-user-defined hz-gb-2312 replacement
+us-ascii US-ASCII ascii us ANSI_X3.4-1968 iso646-us csascii iso-8859-1 ISO-8859-1 latin1 l1 cp819
+iso_8859-1 iso8859-1 iso88591 iso-8859-2 iso-8859-3 iso-8859-4 iso-8859-5 iso-8859-6 iso-8859-7
+iso-8859-8 iso-8859-9 iso-8859-10 iso-8859-11 iso-8859-13 iso-8859-14 iso-8859-15 iso-8859-16 latin9
+latin5 greek cyrillic arabic hebrew windows-1250 windows-1251 windows-1252 windows-1253 windows-1254
+windows-1255 windows-1256 windows-1257 windows-1258 cp1250 cp1252 cp1258 ms-ansi utf-8 UTF-8 utf8
+utf-16 UTF-16 utf-16le utf-16be utf16 unicode ucs-2 ucs-2le utf-32 ucs-4 shift_jis Shift_JIS sjis
+ms_kanji csshiftjis cp932 ms932 windows-31j euc-jp EUC-JP eucjp ujis euc-jp-ms eucjp-ms iso-2022-jp
+ISO-2022-JP iso-2022-jp-1 iso-2022-jp-2 iso-2022-jp-3 csiso2022jp iso2022jp gb2312 gbk gb18030 cp936
+euc-cn big5 big5-hkscs cp950 euc-kr cp949 uhc johab koi8-r koi8-u koi8-ru koi-8 ibm866 cp866 866
+macintosh mac tis-620 tis620 cp874 windows-874 ibm874 utf-7 utf7 utf-7-imap x-utf-7
+unicode-1-1-utf-7 iso-2022-kr iso-2022-cn ibm037 ebcdic-us x-unknown unknown-8bit unknown x
+utf~8 s!jis SHIFT-JIS ISO-8859_1 latin-1 utf_8 euc_jp Shift_JIS*ja
+""".split()
+
+
+def make_charset(mail):
+    """charset: an encoded-word of "mewl" in each charset name."""
+    mail = os.path.join(mail, "charset")
+    os.makedirs(mail, exist_ok=True)
+    for i, name in enumerate(CHARSET_NAMES, 1):
+        word = b"=?" + name.encode() + b"?B?" + base64.b64encode(b"mewl") + b"?="
+        w(f"{mail}/{i}", b"Subject: " + word + b"\nX-Charset: " + name.encode() + b"\nFrom: x@example.com\n\nbody\n")
+
+
 def make_lists(cwd):
     """The lists for -i. list2 has a long line and a line with NUL."""
     os.makedirs(cwd, exist_ok=True)
@@ -232,6 +271,7 @@ def main():
     make_uni(mail)
     make_utf7(mail)
     make_iso2022jp(mail)
+    make_charset(mail)
     make_lists(os.path.join(root, "cwd"))
     w(os.path.join(root, "VERSION"), b"%d\n" % VERSION)
 
