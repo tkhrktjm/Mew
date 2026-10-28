@@ -20,6 +20,8 @@ mewl-rs には独自のバージョンがあるので、`-v` が表示するバ�
 - `classify.py`: `difftest.py --dump` が書き出した不一致を、それを
   説明するはずの変更ごとに分類する。
 - `fake-inc`: `mewl -e` のための incm の代わり。
+- `mewcheck.py` と `mewcheck.el`: mewl-rs の復号と Mew の表示を比べる
+  (後述)。
 
 ## バイナリのビルド
 
@@ -91,6 +93,30 @@ TOTAL: 7903 run, 15 mismatches
 コーパスには UTF-7 の単独の下位サロゲートがない。mewl-rs はこれを不正と
 するが、glibc は独自の扱いをする (src/utf7.rs を参照)。
 
+## Mew との照合
+
+`mewl-rs` として起動した mewl-rs は、Emacs が Unicode の文字を持つ限り、
+Mew と同じく、つまり Emacs と同じように charset を復号する。
+`mewcheck.py` は、Emacs と Mew の elisp (既定は `../../../../elisp`) で
+これを確かめる。Mew の `mew-cs-database-for-decoding` の charset ごとに、
+各コードの encoded-word を作り、`mewl-rs -d subject:` の出力と、
+`mew-header-decode` がそれから作るものを比べる。
+
+```
+% ./mewcheck.py ../target/release/mewl-rs
+...
+TOTAL: 24 differ, 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191830 same
+```
+
+Emacs 30.2 では、24 の違いは `us-ascii` にある。Mew は 8 ビットのバイトを
+含む `us-ascii` では charset を推測する。"invalid" は、Emacs が生のバイトの
+まま残し、mewl-rs が U+FFFD に置き換えるコードである。"invalid to Mew
+only" は mewl-rs が復号するもので、Big5-HKSCS の拡張や、windows-1252 が
+未定義とするバイトなどである。"no Unicode in Emacs" は JIS X 0208 の NEC
+特殊文字などの文字で、"private or unassigned to Mew" は、Emacs が私用
+領域や未割り当てのコードポイントに対応させるもので、Big5 の拡張の大部分
+などである。mewl-rs は、これらに Encoding Standard の文字を当てる。
+
 ## コミットログの件数の再現
 
 下に挙げた各リビジョンの C 版 mewl と、シリーズの各コミットの mewl-rs を
@@ -154,6 +180,10 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | 20. fold characters for `=` and `!=` in mewl-rs | `./difftest.py rs/19 rs/20 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 73 mismatches、すべて `=` か `!=` の pick: `+uni` で 60、`+iso2022jp` で 7、`+mime` で 4、`+utf7` で 2 |
 | | `--enable-utf8proc-char-fold` 付きでビルドした C 版 mewl で `./difftest.py --suite uni C-464013a-char-fold rs/20 --name-b mewl-rs` | 1626 run, 224 mismatches、`./difftest.py --suite uni C-464013a rs/19 --name-b mewl-rs` と同じケースと出力 |
+
+| 21. convert charsets as Mew does in mewl-rs | `./difftest.py rs/20 rs/21 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 114 mismatches: +utf7/29 (`unicode-1-1-utf-7`) で 73、+iso2022jp/16 (GB 2312) で 14、`+charset` の 7 通のメッセージで 27 |
+| | `./mewcheck.py rs/21` (と rs/20) | 24 differ, 191830 same (188 differ, 191666 same) |
 
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で

@@ -11,18 +11,25 @@
 //!
 //! `mewl-rs` knows the names of the Encoding Standard and, for the
 //! converters emulated, those of glibc as well, and converts a charset
-//! as the Encoding Standard does: a single-byte one by encoding_rs.
-//! Shift_JIS and EUC-JP, told from CP932 and eucJP-ms as glibc does,
-//! have the six characters of JIS X 0208 as Emacs does ([`crate::jis`]).
+//! as Mew does, by Emacs, as far as the characters have Unicode, and
+//! otherwise as the Encoding Standard does: ISO-8859-1, ISO-8859-9,
+//! ISO-8859-11, and TIS-620 by the tables of glibc, not as supersets of
+//! Windows; Shift_JIS and EUC-JP, told from CP932 and eucJP-ms as glibc
+//! does, with seven characters of JIS X 0208 as Emacs takes them
+//! ([`crate::jis`]); GB 2312, GB18030, EUC-KR, and Big5 with a few
+//! characters as Emacs takes them ([`patched`]); and the rest by
+//! encoding_rs.
 
 pub mod glibc;
+pub mod patched;
 
-use encoding_rs::{DecoderResult, EUC_JP, Encoding, SHIFT_JIS};
+use encoding_rs::{BIG5, DecoderResult, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS};
 
 use crate::iso2022jp;
 use crate::jis;
 use crate::mime::Rules;
 use crate::utf7;
+use patched::Patch;
 
 /// A converter of a charset to UTF-8.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,6 +44,9 @@ pub enum Converter {
     Single(&'static SingleByte),
     /// Shift_JIS, EUC-JP, or a variant.
     Jis(jis::Variant),
+    /// GB 2312, GB18030, EUC-KR, or Big5: by encoding_rs, and for
+    /// [`Rules::Rfc`] with a few characters as Emacs takes them.
+    Patched(Patch),
 }
 
 /// A single-byte charset of glibc whose lower half is US-ASCII.
@@ -44,14 +54,18 @@ pub enum Converter {
 pub struct SingleByte {
     /// The encoding of encoding_rs for the charset, for [`Rules::Rfc`].
     encoding: &'static Encoding,
+    /// Whether [`Rules::Rfc`] takes the table instead, as Mew does, the
+    /// encoding being a superset of Windows.
+    mew: bool,
     /// The code points of 0x80 to 0xFF, 0 if invalid.
     upper: [u16; 128],
 }
 
 impl SingleByte {
     /// Converts `input` to UTF-8. With `keep_invalid`, an invalid byte is
-    /// kept as it is; otherwise it fails.
-    fn convert(&self, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+    /// kept as it is by [`Rules::Glibc`] and replaced with U+FFFD by
+    /// [`Rules::Rfc`]; otherwise it fails.
+    fn convert(&self, input: &[u8], rules: Rules, keep_invalid: bool) -> Option<Vec<u8>> {
         let mut out = Vec::with_capacity(input.len() * 2);
         for &b in input {
             if b < 0x80 {
@@ -60,6 +74,7 @@ impl SingleByte {
             }
             match char::from_u32(self.upper[usize::from(b - 0x80)].into()).filter(|&c| c != '\0') {
                 Some(c) => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
+                None if keep_invalid && rules == Rules::Rfc => out.extend_from_slice("\u{fffd}".as_bytes()),
                 None if keep_invalid => out.push(b),
                 None => return None,
             }
@@ -82,16 +97,34 @@ impl Converter {
             Converter::Encoding(encoding) => convert(encoding, input, keep_invalid),
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
-            Converter::Single(table) => table.convert(input, keep_invalid),
+            Converter::Single(table) => table.convert(input, rules, keep_invalid),
             Converter::Jis(variant) => jis::convert(variant, rules, input, keep_invalid),
+            Converter::Patched(patch) if rules == Rules::Rfc => patched::convert(patch, input, keep_invalid),
+            Converter::Patched(patch) => convert(patch.encoding(), input, keep_invalid),
         }
     }
 
     /// What `mewl-rs` takes a converter of glibc for.
     fn for_rfc(self) -> Self {
         match self {
-            Converter::Single(table) => Converter::Encoding(table.encoding),
+            Converter::Single(table) if !table.mew => Converter::Encoding(table.encoding),
             converter => converter,
+        }
+    }
+
+    /// What `mewl-rs` takes an encoding of encoding_rs named `name` for:
+    /// Shift_JIS, EUC-JP, GB 2312 (but GBK), GB18030, EUC-KR, and Big5
+    /// (but Big5-HKSCS) with a few characters as Emacs takes them.
+    fn for_encoding(name: &[u8], encoding: &'static Encoding) -> Self {
+        let named = |s: &[u8]| name.windows(s.len()).any(|w| w.eq_ignore_ascii_case(s));
+        match encoding {
+            e if e == SHIFT_JIS => Converter::Jis(jis::Variant::ShiftJis),
+            e if e == EUC_JP => Converter::Jis(jis::Variant::EucJp),
+            e if e == GBK && !named(b"gbk") => Converter::Patched(Patch::Gb2312),
+            e if e == GB18030 => Converter::Patched(Patch::Gb18030),
+            e if e == EUC_KR => Converter::Patched(Patch::EucKr),
+            e if e == BIG5 && !named(b"hkscs") => Converter::Patched(Patch::Big5),
+            e => Converter::Encoding(e),
         }
     }
 }
@@ -148,20 +181,20 @@ impl Charset {
                 if let Some(variant) = utf7::Variant::for_charset(name) {
                     return Some(Charset::Rfc(Converter::Utf7(variant)));
                 }
-                /* Shift_JIS or CP932, which the Encoding Standard does not tell apart */
-                let converter = glibc_converter(name);
-                if let Some(converter @ Converter::Jis(_)) = converter {
-                    return Some(Charset::Rfc(converter));
+                if name.eq_ignore_ascii_case(b"unicode-1-1-utf-7") {
+                    /* the name of RFC 1642, which Mew knows */
+                    return Some(Charset::Rfc(Converter::Utf7(utf7::Variant::Utf7)));
+                }
+                /* glibc tells apart what the Encoding Standard does not,
+                such as Shift_JIS and CP932, or ISO-8859-1 and windows-1252. */
+                let converter = glibc_converter(name).map(Converter::for_rfc);
+                if let Some(Converter::Jis(_) | Converter::Patched(_) | Converter::Single(_)) = converter {
+                    return converter.map(Charset::Rfc);
                 }
                 if let Some(encoding) = Encoding::for_label_no_replacement(name) {
-                    let converter = match encoding {
-                        e if e == SHIFT_JIS => Converter::Jis(jis::Variant::ShiftJis),
-                        e if e == EUC_JP => Converter::Jis(jis::Variant::EucJp),
-                        e => Converter::Encoding(e),
-                    };
-                    return Some(Charset::Rfc(converter));
+                    return Some(Charset::Rfc(Converter::for_encoding(name, encoding)));
                 }
-                converter.map(|converter| Charset::Rfc(converter.for_rfc()))
+                converter.map(Charset::Rfc)
             }
         }
     }
@@ -258,7 +291,11 @@ mod tests {
         /* Latin-1 and US-ASCII are not windows-1252. */
         assert_eq!(decode("ISO-8859-1", b"caf\xe9 \x80\x9f"), Some("café \u{80}\u{9f}".into()));
         assert_eq!(decode("latin1", b"\xff"), Some("ÿ".into()));
-        assert_eq!(rfc("latin1").unwrap().convert(b"\x80"), Some("€".into()));
+        /* also for mewl-rs, as Mew does, but what is invalid is U+FFFD */
+        assert_eq!(rfc("latin1").unwrap().convert(b"\x80\xe9"), Some("\u{80}é".into()));
+        assert_eq!(rfc("iso-8859-9").unwrap().convert(b"\x80\xd0"), Some("\u{80}Ğ".into()));
+        assert_eq!(rfc("tis-620").unwrap().convert(b"\xa1\x80"), Some("ก\u{fffd}".into()));
+        assert_eq!(rfc("windows-1252").unwrap().convert(b"\x80"), Some("€".into()));
         assert_eq!(decode("US-ASCII", b"a\xe9b"), Some("a\u{fffd}b".into()));
         assert_eq!(Charset::for_name(b"us-ascii", Rules::Glibc).unwrap().convert(b"a\xe9b"), Some(b"a\xe9b".to_vec()));
         /* ISO-8859-9 is not windows-1254, nor TIS-620 windows-874 */
@@ -282,7 +319,7 @@ mod tests {
             assert_eq!(glibc(name), None, "{name}");
         }
         /* renamed or retried as mewl does */
-        let cp949 = Some(Converter::Encoding(encoding_rs::EUC_KR));
+        let cp949 = Some(Converter::Patched(Patch::EucKr));
         assert_eq!(glibc("KS_C_5601-1987"), Some(Charset::Glibc { name: cp949, retry: None }));
         assert_eq!(glibc("euc-kr"), Some(Charset::Glibc { name: cp949, retry: cp949 }));
         let cp932 = Some(Converter::Jis(jis::Variant::Cp932));
@@ -295,26 +332,42 @@ mod tests {
 
     #[test]
     fn rfc_names() {
-        /* the Encoding Standard first */
-        assert_eq!(rfc("latin1"), Some(Charset::Rfc(Converter::Encoding(encoding_rs::WINDOWS_1252))));
+        /* the Encoding Standard, but where glibc tells apart more */
+        assert_eq!(rfc("x-cp1252"), Some(Charset::Rfc(Converter::Encoding(encoding_rs::WINDOWS_1252))));
+        assert!(matches!(rfc("latin1"), Some(Charset::Rfc(Converter::Single(_)))));
         assert_eq!(rfc("x-mac-roman"), Some(Charset::Rfc(Converter::Encoding(encoding_rs::MACINTOSH))));
         assert_eq!(rfc("iso-2022-jp-1"), Some(Charset::Rfc(Converter::Iso2022Jp(iso2022jp::Variant::Jp1))));
         /* then glibc */
         for (name, encoding) in [
-            ("cp949", encoding_rs::EUC_KR),
-            ("UHC", encoding_rs::EUC_KR),
             ("cp936", encoding_rs::GBK),
-            ("cp950", encoding_rs::BIG5),
             ("cp874", encoding_rs::WINDOWS_874),
-            ("TIS620", encoding_rs::WINDOWS_874),
             ("latin9", encoding_rs::ISO_8859_15),
             ("ANSI_X3.4-1968", encoding_rs::WINDOWS_1252),
-            ("iso_8859-1", encoding_rs::WINDOWS_1252),
             ("koi-8", encoding_rs::KOI8_R),
         ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Encoding(encoding))), "{name}");
         }
         assert_eq!(rfc("UTF-32"), None);
+        assert_eq!(rfc("unicode-1-1-utf-7"), Some(Charset::Rfc(Converter::Utf7(utf7::Variant::Utf7))));
+        assert_eq!(glibc("unicode-1-1-utf-7"), None);
+        /* with a few characters as Emacs takes them */
+        for (name, patch) in [
+            ("gb2312", Patch::Gb2312),
+            ("chinese", Patch::Gb2312),
+            ("euc-cn", Patch::Gb2312),
+            ("gb18030", Patch::Gb18030),
+            ("euc-kr", Patch::EucKr),
+            ("ks_c_5601-1987", Patch::EucKr),
+            ("cp949", Patch::EucKr),
+            ("big5", Patch::Big5),
+            ("cp950", Patch::Big5),
+            ("x-x-big5", Patch::Big5),
+        ] {
+            assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Patched(patch))), "{name}");
+        }
+        for (name, encoding) in [("gbk", encoding_rs::GBK), ("x-gbk", encoding_rs::GBK), ("big5-hkscs", encoding_rs::BIG5)] {
+            assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Encoding(encoding))), "{name}");
+        }
         /* Shift_JIS and EUC-JP, told from CP932 and eucJP-ms */
         for (name, variant) in [
             ("shift_jis", jis::Variant::ShiftJis),

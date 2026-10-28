@@ -5,6 +5,7 @@ use encoding_rs::*;
 
 use super::Converter::{self, *};
 use super::SingleByte;
+use super::patched::Patch;
 use crate::iso2022jp::Variant as Jp;
 use crate::jis::Variant as Jis;
 use crate::utf7::Variant as U7;
@@ -30,14 +31,14 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"ASCII", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
     (b"ASMO-708", Single(&ISO_8859_6)), /* ISO-8859-6 */
     (b"BALTIC", Single(&ISO_8859_13)), /* ISO-8859-13 */
-    (b"BIG-5", Encoding(&BIG5_INIT)), /* BIG5 */
-    (b"BIG-FIVE", Encoding(&BIG5_INIT)), /* BIG5 */
-    (b"BIG5", Encoding(&BIG5_INIT)), /* BIG5 */
+    (b"BIG-5", Patched(Patch::Big5)), /* BIG5 */
+    (b"BIG-FIVE", Patched(Patch::Big5)), /* BIG5 */
+    (b"BIG5", Patched(Patch::Big5)), /* BIG5 */
     (b"BIG5-HKSCS", Encoding(&BIG5_INIT)), /* BIG5HKSCS */
     (b"BIG5HKSCS", Encoding(&BIG5_INIT)), /* BIG5HKSCS */
-    (b"BIGFIVE", Encoding(&BIG5_INIT)), /* BIG5 */
-    (b"CN-BIG5", Encoding(&BIG5_INIT)), /* BIG5 */
-    (b"CN-GB", Encoding(&GBK_INIT)), /* EUC-CN */
+    (b"BIGFIVE", Patched(Patch::Big5)), /* BIG5 */
+    (b"CN-BIG5", Patched(Patch::Big5)), /* BIG5 */
+    (b"CN-GB", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"CP1089", Single(&ISO_8859_6)), /* ISO-8859-6 */
     (b"CP1250", Single(&CP1250)), /* CP1250 */
     (b"CP1251", Single(&CP1251)), /* CP1251 */
@@ -59,12 +60,12 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"CP920", Single(&ISO_8859_9)), /* ISO-8859-9 */
     (b"CP932", Jis(Jis::Cp932)), /* CP932 */
     (b"CP936", Encoding(&GBK_INIT)), /* GBK */
-    (b"CP949", Encoding(&EUC_KR_INIT)), /* UHC */
-    (b"CP950", Encoding(&BIG5_INIT)), /* BIG5 */
+    (b"CP949", Patched(Patch::EucKr)), /* UHC */
+    (b"CP950", Patched(Patch::Big5)), /* BIG5 */
     (b"CSASCII", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
-    (b"CSEUCKR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
+    (b"CSEUCKR", Patched(Patch::EucKr)), /* EUC-KR */
     (b"CSEUCPKDFMTJAPANESE", Jis(Jis::EucJp)), /* EUC-JP */
-    (b"CSGB2312", Encoding(&GBK_INIT)), /* EUC-CN */
+    (b"CSGB2312", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"CSIBM866", Single(&IBM866)), /* IBM866 */
     (b"CSISO2022JP", Iso2022Jp(Jp::Jp)), /* ISO-2022-JP */
     (b"CSISO2022JP2", Iso2022Jp(Jp::Jp2)), /* ISO-2022-JP-2 */
@@ -88,19 +89,19 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"ECMA-118", Single(&ISO_8859_7)), /* ISO-8859-7 */
     (b"ECMA-128", Single(&ISO_8859_9)), /* ISO-8859-9 */
     (b"ELOT_928", Single(&ISO_8859_7)), /* ISO-8859-7 */
-    (b"EUC-CN", Encoding(&GBK_INIT)), /* EUC-CN */
+    (b"EUC-CN", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"EUC-JP", Jis(Jis::EucJp)), /* EUC-JP */
     (b"EUC-JP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
-    (b"EUC-KR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
-    (b"EUCCN", Encoding(&GBK_INIT)), /* EUC-CN */
+    (b"EUC-KR", Patched(Patch::EucKr)), /* EUC-KR */
+    (b"EUCCN", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"EUCJP", Jis(Jis::EucJp)), /* EUC-JP */
     (b"EUCJP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUCJP-OPEN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUCJP-WIN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
-    (b"EUCKR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
+    (b"EUCKR", Patched(Patch::EucKr)), /* EUC-KR */
     (b"GB13000", Encoding(&GBK_INIT)), /* GBK */
-    (b"GB18030", Encoding(&GB18030_INIT)), /* GB18030 */
-    (b"GB2312", Encoding(&GBK_INIT)), /* EUC-CN */
+    (b"GB18030", Patched(Patch::Gb18030)), /* GB18030 */
+    (b"GB2312", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"GBK", Encoding(&GBK_INIT)), /* GBK */
     (b"GREEK", Single(&ISO_8859_7)), /* ISO-8859-7 */
     (b"GREEK8", Single(&ISO_8859_7)), /* ISO-8859-7 */
@@ -250,7 +251,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"MS-TURK", Single(&CP1254)), /* CP1254 */
     (b"MS932", Jis(Jis::Cp932)), /* CP932 */
     (b"MS936", Encoding(&GBK_INIT)), /* GBK */
-    (b"MSCP949", Encoding(&EUC_KR_INIT)), /* UHC */
+    (b"MSCP949", Patched(Patch::EucKr)), /* UHC */
     (b"MS_KANJI", Jis(Jis::ShiftJis)), /* SJIS */
     (b"OSF00010001", Single(&ISO_8859_1)), /* ISO-8859-1 */
     (b"OSF00010002", Single(&ISO_8859_2)), /* ISO-8859-2 */
@@ -267,9 +268,9 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"OSF00010101", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00010102", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00030010", Jis(Jis::EucJp)), /* EUC-JP */
-    (b"OSF0004000A", Encoding(&EUC_KR_INIT)), /* EUC-KR */
+    (b"OSF0004000A", Patched(Patch::EucKr)), /* EUC-KR */
     (b"OSF05010001", Encoding(&UTF_8_INIT)), /* UTF-8 */
-    (b"OSF100203B5", Encoding(&EUC_KR_INIT)), /* UHC */
+    (b"OSF100203B5", Patched(Patch::EucKr)), /* UHC */
     (b"SHIFT-JIS", Jis(Jis::ShiftJis)), /* SJIS */
     (b"SHIFT_JIS", Jis(Jis::ShiftJis)), /* SJIS */
     (b"SJIS", Jis(Jis::ShiftJis)), /* SJIS */
@@ -285,7 +286,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"UCS-2BE", Encoding(&UTF_16BE_INIT)), /* UCS-2BE */
     (b"UCS-2LE", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"UCS2", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"UHC", Encoding(&EUC_KR_INIT)), /* UHC */
+    (b"UHC", Patched(Patch::EucKr)), /* UHC */
     (b"UJIS", Jis(Jis::EucJp)), /* EUC-JP */
     (b"UNICODE", Encoding(&UTF_16LE_INIT)), /* UNICODE */
     (b"UNICODEBIG", Encoding(&UTF_16BE_INIT)), /* UCS-2BE */
@@ -432,6 +433,7 @@ pub static EUC_JP_MS_IBM: &[(u16, u16)] = &[
 /// ANSI_X3.4-1968
 static ANSI_X3_4_1968: SingleByte = SingleByte {
     encoding: &WINDOWS_1252_INIT,
+    mew: false,
     upper: [
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 80 */
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -455,6 +457,7 @@ static ANSI_X3_4_1968: SingleByte = SingleByte {
 /// ISO-8859-1
 static ISO_8859_1: SingleByte = SingleByte {
     encoding: &WINDOWS_1252_INIT,
+    mew: true,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -478,6 +481,7 @@ static ISO_8859_1: SingleByte = SingleByte {
 /// ISO-8859-2
 static ISO_8859_2: SingleByte = SingleByte {
     encoding: &ISO_8859_2_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -501,6 +505,7 @@ static ISO_8859_2: SingleByte = SingleByte {
 /// ISO-8859-3
 static ISO_8859_3: SingleByte = SingleByte {
     encoding: &ISO_8859_3_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -524,6 +529,7 @@ static ISO_8859_3: SingleByte = SingleByte {
 /// ISO-8859-4
 static ISO_8859_4: SingleByte = SingleByte {
     encoding: &ISO_8859_4_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -547,6 +553,7 @@ static ISO_8859_4: SingleByte = SingleByte {
 /// ISO-8859-5
 static ISO_8859_5: SingleByte = SingleByte {
     encoding: &ISO_8859_5_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -570,6 +577,7 @@ static ISO_8859_5: SingleByte = SingleByte {
 /// ISO-8859-6
 static ISO_8859_6: SingleByte = SingleByte {
     encoding: &ISO_8859_6_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -593,6 +601,7 @@ static ISO_8859_6: SingleByte = SingleByte {
 /// ISO-8859-7
 static ISO_8859_7: SingleByte = SingleByte {
     encoding: &ISO_8859_7_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -616,6 +625,7 @@ static ISO_8859_7: SingleByte = SingleByte {
 /// ISO-8859-8
 static ISO_8859_8: SingleByte = SingleByte {
     encoding: &ISO_8859_8_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -639,6 +649,7 @@ static ISO_8859_8: SingleByte = SingleByte {
 /// ISO-8859-9
 static ISO_8859_9: SingleByte = SingleByte {
     encoding: &WINDOWS_1254_INIT,
+    mew: true,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -662,6 +673,7 @@ static ISO_8859_9: SingleByte = SingleByte {
 /// ISO-8859-10
 static ISO_8859_10: SingleByte = SingleByte {
     encoding: &ISO_8859_10_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -685,6 +697,7 @@ static ISO_8859_10: SingleByte = SingleByte {
 /// ISO-8859-11
 static ISO_8859_11: SingleByte = SingleByte {
     encoding: &WINDOWS_874_INIT,
+    mew: true,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -708,6 +721,7 @@ static ISO_8859_11: SingleByte = SingleByte {
 /// ISO-8859-13
 static ISO_8859_13: SingleByte = SingleByte {
     encoding: &ISO_8859_13_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -731,6 +745,7 @@ static ISO_8859_13: SingleByte = SingleByte {
 /// ISO-8859-14
 static ISO_8859_14: SingleByte = SingleByte {
     encoding: &ISO_8859_14_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -754,6 +769,7 @@ static ISO_8859_14: SingleByte = SingleByte {
 /// ISO-8859-15
 static ISO_8859_15: SingleByte = SingleByte {
     encoding: &ISO_8859_15_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -777,6 +793,7 @@ static ISO_8859_15: SingleByte = SingleByte {
 /// ISO-8859-16
 static ISO_8859_16: SingleByte = SingleByte {
     encoding: &ISO_8859_16_INIT,
+    mew: false,
     upper: [
         0x0080, 0x0081, 0x0082, 0x0083, 0x0084, 0x0085, 0x0086, 0x0087, /* 80 */
         0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F, /* 88 */
@@ -800,6 +817,7 @@ static ISO_8859_16: SingleByte = SingleByte {
 /// TIS-620
 static TIS_620: SingleByte = SingleByte {
     encoding: &WINDOWS_874_INIT,
+    mew: true,
     upper: [
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 80 */
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -823,6 +841,7 @@ static TIS_620: SingleByte = SingleByte {
 /// IBM874
 static IBM874: SingleByte = SingleByte {
     encoding: &WINDOWS_874_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x0000, 0x0000, 0x0000, 0x2026, 0x0000, 0x0000, /* 80 */
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -846,6 +865,7 @@ static IBM874: SingleByte = SingleByte {
 /// KOI-8
 static KOI_8: SingleByte = SingleByte {
     encoding: &KOI8_R_INIT,
+    mew: false,
     upper: [
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 80 */
         0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -869,6 +889,7 @@ static KOI_8: SingleByte = SingleByte {
 /// KOI8-R
 static KOI8_R: SingleByte = SingleByte {
     encoding: &KOI8_R_INIT,
+    mew: false,
     upper: [
         0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x251C, 0x2524, /* 80 */
         0x252C, 0x2534, 0x253C, 0x2580, 0x2584, 0x2588, 0x258C, 0x2590, /* 88 */
@@ -892,6 +913,7 @@ static KOI8_R: SingleByte = SingleByte {
 /// KOI8-U
 static KOI8_U: SingleByte = SingleByte {
     encoding: &KOI8_U_INIT,
+    mew: false,
     upper: [
         0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x251C, 0x2524, /* 80 */
         0x252C, 0x2534, 0x253C, 0x2580, 0x2584, 0x2588, 0x258C, 0x2590, /* 88 */
@@ -915,6 +937,7 @@ static KOI8_U: SingleByte = SingleByte {
 /// KOI8-RU
 static KOI8_RU: SingleByte = SingleByte {
     encoding: &KOI8_U_INIT,
+    mew: false,
     upper: [
         0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x251C, 0x2524, /* 80 */
         0x252C, 0x2534, 0x253C, 0x2580, 0x2584, 0x2588, 0x258C, 0x2590, /* 88 */
@@ -938,6 +961,7 @@ static KOI8_RU: SingleByte = SingleByte {
 /// IBM866
 static IBM866: SingleByte = SingleByte {
     encoding: &IBM866_INIT,
+    mew: false,
     upper: [
         0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, /* 80 */
         0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, /* 88 */
@@ -961,6 +985,7 @@ static IBM866: SingleByte = SingleByte {
 /// MACINTOSH
 static MACINTOSH: SingleByte = SingleByte {
     encoding: &MACINTOSH_INIT,
+    mew: false,
     upper: [
         0x00C4, 0x00C5, 0x00C7, 0x00C9, 0x00D1, 0x00D6, 0x00DC, 0x00E1, /* 80 */
         0x00E0, 0x00E2, 0x00E4, 0x00E3, 0x00E5, 0x00E7, 0x00E9, 0x00E8, /* 88 */
@@ -984,6 +1009,7 @@ static MACINTOSH: SingleByte = SingleByte {
 /// CP1250
 static CP1250: SingleByte = SingleByte {
     encoding: &WINDOWS_1250_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x201A, 0x0000, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x0000, 0x2030, 0x0160, 0x2039, 0x015A, 0x0164, 0x017D, 0x0179, /* 88 */
@@ -1007,6 +1033,7 @@ static CP1250: SingleByte = SingleByte {
 /// CP1251
 static CP1251: SingleByte = SingleByte {
     encoding: &WINDOWS_1251_INIT,
+    mew: false,
     upper: [
         0x0402, 0x0403, 0x201A, 0x0453, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x20AC, 0x2030, 0x0409, 0x2039, 0x040A, 0x040C, 0x040B, 0x040F, /* 88 */
@@ -1030,6 +1057,7 @@ static CP1251: SingleByte = SingleByte {
 /// CP1252
 static CP1252: SingleByte = SingleByte {
     encoding: &WINDOWS_1252_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x0000, 0x017D, 0x0000, /* 88 */
@@ -1053,6 +1081,7 @@ static CP1252: SingleByte = SingleByte {
 /// CP1253
 static CP1253: SingleByte = SingleByte {
     encoding: &WINDOWS_1253_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x0000, 0x2030, 0x0000, 0x2039, 0x0000, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -1076,6 +1105,7 @@ static CP1253: SingleByte = SingleByte {
 /// CP1254
 static CP1254: SingleByte = SingleByte {
     encoding: &WINDOWS_1254_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x0000, 0x0000, 0x0000, /* 88 */
@@ -1099,6 +1129,7 @@ static CP1254: SingleByte = SingleByte {
 /// CP1256
 static CP1256: SingleByte = SingleByte {
     encoding: &WINDOWS_1256_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x067E, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x02C6, 0x2030, 0x0679, 0x2039, 0x0152, 0x0686, 0x0698, 0x0688, /* 88 */
@@ -1122,6 +1153,7 @@ static CP1256: SingleByte = SingleByte {
 /// CP1257
 static CP1257: SingleByte = SingleByte {
     encoding: &WINDOWS_1257_INIT,
+    mew: false,
     upper: [
         0x20AC, 0x0000, 0x201A, 0x0000, 0x201E, 0x2026, 0x2020, 0x2021, /* 80 */
         0x0000, 0x2030, 0x0000, 0x2039, 0x0000, 0x00A8, 0x02C7, 0x00B8, /* 88 */

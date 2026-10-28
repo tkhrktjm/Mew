@@ -20,6 +20,8 @@ Only Python 3 is needed besides the binaries.
 - `classify.py`: sorts the mismatches dumped by `difftest.py --dump`
   by the change that should explain them.
 - `fake-inc`: a stand-in for incm, for `mewl -e`.
+- `mewcheck.py` and `mewcheck.el`: compare what mewl-rs decodes with
+  what Mew shows (see below).
 
 ## Building the binaries
 
@@ -92,6 +94,32 @@ TOTAL: 7903 run, 15 mismatches
 The corpus has no lone low surrogate in UTF-7, which mewl-rs takes
 as invalid while glibc goes its own way (see src/utf7.rs).
 
+## Checking against Mew
+
+mewl-rs, invoked as `mewl-rs`, decodes a charset as Mew does, by
+Emacs, as far as Emacs has the characters in Unicode. `mewcheck.py`
+checks it with Emacs and Mew's elisp (`../../../../elisp` by default):
+for each charset of Mew's `mew-cs-database-for-decoding`, it makes an
+encoded-word of each code, and compares what `mewl-rs -d subject:`
+prints with what `mew-header-decode` makes of it.
+
+```
+% ./mewcheck.py ../target/release/mewl-rs
+...
+TOTAL: 24 differ, 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191830 same
+```
+
+With Emacs 30.2, the 24 differences are in `us-ascii`, which Mew
+guesses when it has 8-bit bytes. "invalid" are codes that Emacs keeps
+as raw bytes and mewl-rs replaces with U+FFFD, and "invalid to Mew
+only" those that mewl-rs decodes, such as the extensions of Big5-HKSCS
+and the bytes that windows-1252 leaves undefined. "no Unicode in
+Emacs" are characters such as the NEC special characters of JIS X
+0208, and "private or unassigned to Mew" those that Emacs maps to the
+Private Use Area or to unassigned code points, such as most of the
+extensions of Big5, where mewl-rs has the characters of the Encoding
+Standard.
+
 ## Reproducing the counts in the commit messages
 
 Build the C mewl of each revision named below, and mewl-rs of each
@@ -152,6 +180,10 @@ commit after main). The commands are run in this directory.
 | 20. fold characters for `=` and `!=` in mewl-rs | `./difftest.py rs/19 rs/20 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 73 mismatches, all picks with `=` or `!=`: 60 in `+uni`, 7 in `+iso2022jp`, 4 in `+mime`, and 2 in `+utf7` |
 | | `./difftest.py --suite uni C-464013a-char-fold rs/20 --name-b mewl-rs`, with the C mewl built with `--enable-utf8proc-char-fold` | 1626 run, 224 mismatches, the same cases and outputs as `./difftest.py --suite uni C-464013a rs/19 --name-b mewl-rs` |
+
+| 21. convert charsets as Mew does in mewl-rs | `./difftest.py rs/20 rs/21 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 114 mismatches: 73 on +utf7/29 (`unicode-1-1-utf-7`), 14 on +iso2022jp/16 (GB 2312), and 27 on 7 messages of `+charset` |
+| | `./mewcheck.py rs/21` (and rs/20) | 24 differ, 191830 same (188 differ, 191666 same) |
 
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is

@@ -34,8 +34,9 @@
 //! The tables are those of encoding_rs, so JIS X 0208 has the
 //! extensions of Windows, e.g. the NEC special characters, but seven
 //! characters are those of JIS as Emacs takes them, e.g. 0x2141 is
-//! U+301C as for glibc ([`crate::jis::jis0208`]); GB 2312
-//! is not extended to GBK, and KS C 5601 has U+327E of KS X 1001:2002,
+//! U+301C as for glibc ([`crate::jis::jis0208`]); GB 2312 is not
+//! extended to GBK and has two characters as Emacs and glibc take them,
+//! e.g. 0x2124 is U+30FB; and KS C 5601 has U+327E of KS X 1001:2002,
 //! as glibc does. What is invalid is replaced with U+FFFD: a byte with
 //! the top bit set, a character not in its set, and an escape sequence
 //! not known, which is skipped as a whole as ISO 2022 defines it. The
@@ -279,8 +280,9 @@ impl Decoder {
             return None;
         }
         match (b1, b2) {
-            (0x21, 0x24) if self.glibc() => Some('\u{30fb}'),
-            (0x21, 0x2a) if self.glibc() => Some('\u{2015}'),
+            /* as glibc and Emacs take GB 2312, not as GBK */
+            (0x21, 0x24) => Some('\u{30fb}'),
+            (0x21, 0x2a) => Some('\u{2015}'),
             _ => one(GBK, &[b1 | 0x80, b2 | 0x80]),
         }
     }
@@ -402,8 +404,8 @@ mod tests {
         assert_eq!(rfc(b"\x1b$BF|\xff\x1b(B"), "日\u{fffd}");
         assert_eq!(rfc(b"\x1b$BF"), "\u{fffd}");
         assert_eq!(rfc(b"\x1bZa"), "\u{fffd}a");
-        /* GB 2312, not GBK, and KS X 1001:2002 */
-        assert_eq!(rfc(b"\x1b$A!$*!\x1b(B"), "\u{b7}\u{fffd}");
+        /* GB 2312, not GBK, as Emacs takes it, and KS X 1001:2002 */
+        assert_eq!(rfc(b"\x1b$A!$!**!\x1b(B"), "\u{30fb}\u{2015}\u{fffd}");
         assert_eq!(rfc(b"\x1b$(C\"h\x1b(B"), "\u{327e}");
     }
 }

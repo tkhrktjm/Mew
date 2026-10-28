@@ -54,23 +54,29 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
 - Raw ISO-2022-JP in a header, which old Japanese mailers wrote
   without encoding, is converted to UTF-8.
 - A charset is named as the Encoding Standard names it, or else as
-  glibc does, such as `cp949`, `cp936`, `latin9`, and `ujis`, and is
-  converted by encoding_rs as the Encoding Standard specifies: e.g.
-  ISO-8859-1 and US-ASCII are windows-1252. But in Shift_JIS, EUC-JP,
-  and ISO-2022-JP, seven characters of JIS X 0208 are those of JIS,
-  as Emacs, and so Mew, shows them, not those of Windows: 0x2141 is
-  "〜" (U+301C), not "～" (U+FF5E), and so are 0x2142, 0x213D, 0x215D,
-  0x2171, 0x2172, and 0x224C. Shift_JIS is told from CP932
-  (`windows-31j`) and EUC-JP from eucJP-ms as glibc does, and CP932
-  and eucJP-ms keep those of Windows, as in Emacs.
-- ISO-2022-JP knows every set of ISO-2022-JP-2 (RFC 1554) whatever
-  the charset is named, since an escape sequence tells which set
-  follows: JIS X 0212 as in "Gojō" of some User-Agent, GB 2312, KS C
-  5601, and ISO 8859-1 and 8859-7 by `ESC N`. ISO-2022-JP-1 (RFC 2237)
-  is known too. JIS X 0208 has the extensions of Windows, such as
-  "①". An escape sequence not known, e.g. of JIS X 0213 in
-  ISO-2022-JP-3, is skipped, and the characters of its set are
-  U+FFFD.
+  glibc does, such as `cp949`, `cp936`, `latin9`, and `ujis`, or as
+  Mew does (`unicode-1-1-utf-7`). It is converted as Mew, that is
+  Emacs, shows it, as far as Emacs has the characters in Unicode, and
+  otherwise by encoding_rs as the Encoding Standard specifies:
+  - ISO-8859-1, ISO-8859-9, ISO-8859-11, and TIS-620 are themselves,
+    not windows-1252, windows-1254, and windows-874 as in the Encoding
+    Standard: 0x80 to 0x9F of ISO-8859-1 are the C1 controls.
+  - In Shift_JIS, EUC-JP, and ISO-2022-JP, seven characters of JIS X
+    0208 are those of JIS, not those of Windows: 0x2141 is "〜"
+    (U+301C), not "～" (U+FF5E), and so are 0x2142, 0x213D, 0x215D,
+    0x2171, 0x2172, and 0x224C. Shift_JIS is told from CP932
+    (`windows-31j`) and EUC-JP from eucJP-ms as glibc does, and CP932
+    and eucJP-ms keep those of Windows, as in Emacs.
+  - GB 2312 (but GBK), also in ISO-2022-JP-2, has "・" (U+30FB) and
+    "―" (U+2015) for 0x2124 and 0x212A; GB18030 has six characters of
+    CJK Extension B where the Encoding Standard has the Private Use
+    Area; EUC-KR has "㉾" (U+327E); and Big5 (but Big5-HKSCS) has "▓"
+    (U+2593) for 0xF9FE.
+  - Where Emacs has a character of the Private Use Area, such as most
+    of the extensions of Big5, or none in Unicode, such as the NEC
+    special characters of JIS X 0208, it is as the Encoding Standard
+    takes it, e.g. "①".
+  `difftest/mewcheck.py` compares this with Mew in Emacs, code by code.
 - An invalid byte sequence in the charset of an encoded-word, or in
   raw ISO-2022-JP, is replaced with U+FFFD (REPLACEMENT CHARACTER),
   one for each maximal subpart as the Encoding Standard does, while
