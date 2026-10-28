@@ -6,6 +6,7 @@ use encoding_rs::*;
 use super::Converter::{self, *};
 use super::SingleByte;
 use crate::iso2022jp::Variant as Jp;
+use crate::jis::Variant as Jis;
 use crate::utf7::Variant as U7;
 
 /// The names of the converters emulated, normalized as glibc does
@@ -56,13 +57,13 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"CP915", Single(&ISO_8859_5)), /* ISO-8859-5 */
     (b"CP916", Single(&ISO_8859_8)), /* ISO-8859-8 */
     (b"CP920", Single(&ISO_8859_9)), /* ISO-8859-9 */
-    (b"CP932", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
+    (b"CP932", Jis(Jis::Cp932)), /* CP932 */
     (b"CP936", Encoding(&GBK_INIT)), /* GBK */
     (b"CP949", Encoding(&EUC_KR_INIT)), /* UHC */
     (b"CP950", Encoding(&BIG5_INIT)), /* BIG5 */
     (b"CSASCII", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
     (b"CSEUCKR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
-    (b"CSEUCPKDFMTJAPANESE", Encoding(&EUC_JP_INIT)), /* EUC-JP */
+    (b"CSEUCPKDFMTJAPANESE", Jis(Jis::EucJp)), /* EUC-JP */
     (b"CSGB2312", Encoding(&GBK_INIT)), /* EUC-CN */
     (b"CSIBM866", Single(&IBM866)), /* IBM866 */
     (b"CSISO2022JP", Iso2022Jp(Jp::Jp)), /* ISO-2022-JP */
@@ -79,23 +80,23 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"CSISOLATINHEBREW", Single(&ISO_8859_8)), /* ISO-8859-8 */
     (b"CSKOI8R", Single(&KOI8_R)), /* KOI8-R */
     (b"CSMACINTOSH", Single(&MACINTOSH)), /* MACINTOSH */
-    (b"CSSHIFTJIS", Encoding(&SHIFT_JIS_INIT)), /* SJIS */
+    (b"CSSHIFTJIS", Jis(Jis::ShiftJis)), /* SJIS */
     (b"CSUNICODE", Encoding(&UTF_16LE_INIT)), /* UNICODE */
-    (b"CSWINDOWS31J", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
+    (b"CSWINDOWS31J", Jis(Jis::Cp932)), /* CP932 */
     (b"CYRILLIC", Single(&ISO_8859_5)), /* ISO-8859-5 */
     (b"ECMA-114", Single(&ISO_8859_6)), /* ISO-8859-6 */
     (b"ECMA-118", Single(&ISO_8859_7)), /* ISO-8859-7 */
     (b"ECMA-128", Single(&ISO_8859_9)), /* ISO-8859-9 */
     (b"ELOT_928", Single(&ISO_8859_7)), /* ISO-8859-7 */
     (b"EUC-CN", Encoding(&GBK_INIT)), /* EUC-CN */
-    (b"EUC-JP", Encoding(&EUC_JP_INIT)), /* EUC-JP */
-    (b"EUC-JP-MS", Encoding(&EUC_JP_INIT)), /* EUC-JP-MS */
+    (b"EUC-JP", Jis(Jis::EucJp)), /* EUC-JP */
+    (b"EUC-JP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUC-KR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
     (b"EUCCN", Encoding(&GBK_INIT)), /* EUC-CN */
-    (b"EUCJP", Encoding(&EUC_JP_INIT)), /* EUC-JP */
-    (b"EUCJP-MS", Encoding(&EUC_JP_INIT)), /* EUC-JP-MS */
-    (b"EUCJP-OPEN", Encoding(&EUC_JP_INIT)), /* EUC-JP-MS */
-    (b"EUCJP-WIN", Encoding(&EUC_JP_INIT)), /* EUC-JP-MS */
+    (b"EUCJP", Jis(Jis::EucJp)), /* EUC-JP */
+    (b"EUCJP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
+    (b"EUCJP-OPEN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
+    (b"EUCJP-WIN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUCKR", Encoding(&EUC_KR_INIT)), /* EUC-KR */
     (b"GB13000", Encoding(&GBK_INIT)), /* GBK */
     (b"GB18030", Encoding(&GB18030_INIT)), /* GB18030 */
@@ -247,10 +248,10 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"MS-GREEK", Single(&CP1253)), /* CP1253 */
     (b"MS-HEBR", Encoding(&WINDOWS_1255_INIT)), /* CP1255 */
     (b"MS-TURK", Single(&CP1254)), /* CP1254 */
-    (b"MS932", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
+    (b"MS932", Jis(Jis::Cp932)), /* CP932 */
     (b"MS936", Encoding(&GBK_INIT)), /* GBK */
     (b"MSCP949", Encoding(&EUC_KR_INIT)), /* UHC */
-    (b"MS_KANJI", Encoding(&SHIFT_JIS_INIT)), /* SJIS */
+    (b"MS_KANJI", Jis(Jis::ShiftJis)), /* SJIS */
     (b"OSF00010001", Single(&ISO_8859_1)), /* ISO-8859-1 */
     (b"OSF00010002", Single(&ISO_8859_2)), /* ISO-8859-2 */
     (b"OSF00010003", Single(&ISO_8859_3)), /* ISO-8859-3 */
@@ -265,15 +266,15 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"OSF00010100", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00010101", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00010102", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"OSF00030010", Encoding(&EUC_JP_INIT)), /* EUC-JP */
+    (b"OSF00030010", Jis(Jis::EucJp)), /* EUC-JP */
     (b"OSF0004000A", Encoding(&EUC_KR_INIT)), /* EUC-KR */
     (b"OSF05010001", Encoding(&UTF_8_INIT)), /* UTF-8 */
     (b"OSF100203B5", Encoding(&EUC_KR_INIT)), /* UHC */
-    (b"SHIFT-JIS", Encoding(&SHIFT_JIS_INIT)), /* SJIS */
-    (b"SHIFT_JIS", Encoding(&SHIFT_JIS_INIT)), /* SJIS */
-    (b"SJIS", Encoding(&SHIFT_JIS_INIT)), /* SJIS */
-    (b"SJIS-OPEN", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
-    (b"SJIS-WIN", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
+    (b"SHIFT-JIS", Jis(Jis::ShiftJis)), /* SJIS */
+    (b"SHIFT_JIS", Jis(Jis::ShiftJis)), /* SJIS */
+    (b"SJIS", Jis(Jis::ShiftJis)), /* SJIS */
+    (b"SJIS-OPEN", Jis(Jis::Cp932)), /* CP932 */
+    (b"SJIS-WIN", Jis(Jis::Cp932)), /* CP932 */
     (b"TIS-620", Single(&TIS_620)), /* TIS-620 */
     (b"TIS620", Single(&TIS_620)), /* TIS-620 */
     (b"TIS620-0", Single(&TIS_620)), /* TIS-620 */
@@ -285,7 +286,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"UCS-2LE", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"UCS2", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"UHC", Encoding(&EUC_KR_INIT)), /* UHC */
-    (b"UJIS", Encoding(&EUC_JP_INIT)), /* EUC-JP */
+    (b"UJIS", Jis(Jis::EucJp)), /* EUC-JP */
     (b"UNICODE", Encoding(&UTF_16LE_INIT)), /* UNICODE */
     (b"UNICODEBIG", Encoding(&UTF_16BE_INIT)), /* UCS-2BE */
     (b"UNICODELITTLE", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
@@ -312,9 +313,120 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"WINDOWS-1256", Single(&CP1256)), /* CP1256 */
     (b"WINDOWS-1257", Single(&CP1257)), /* CP1257 */
     (b"WINDOWS-1258", Encoding(&WINDOWS_1258_INIT)), /* CP1258 */
-    (b"WINDOWS-31J", Encoding(&SHIFT_JIS_INIT)), /* CP932 */
+    (b"WINDOWS-31J", Jis(Jis::Cp932)), /* CP932 */
     (b"WINDOWS-874", Single(&IBM874)), /* IBM874 */
     (b"WINDOWS-936", Encoding(&GBK_INIT)), /* GBK */
+];
+
+/// The IBM extensions of eucJP-ms in rows 83 and 84 of JIS X 0212,
+/// which are not in JIS X 0212, and their code points.
+pub static EUC_JP_MS_IBM: &[(u16, u16)] = &[
+    (0xF3F3, 0x2170),
+    (0xF3F4, 0x2171),
+    (0xF3F5, 0x2172),
+    (0xF3F6, 0x2173),
+    (0xF3F7, 0x2174),
+    (0xF3F8, 0x2175),
+    (0xF3F9, 0x2176),
+    (0xF3FA, 0x2177),
+    (0xF3FB, 0x2178),
+    (0xF3FC, 0x2179),
+    (0xF3FD, 0x2160),
+    (0xF3FE, 0x2161),
+    (0xF4A1, 0x2162),
+    (0xF4A2, 0x2163),
+    (0xF4A3, 0x2164),
+    (0xF4A4, 0x2165),
+    (0xF4A5, 0x2166),
+    (0xF4A6, 0x2167),
+    (0xF4A7, 0x2168),
+    (0xF4A8, 0x2169),
+    (0xF4A9, 0xFF07),
+    (0xF4AA, 0xFF02),
+    (0xF4AB, 0x3231),
+    (0xF4AC, 0x2116),
+    (0xF4AD, 0x2121),
+    (0xF4AE, 0x70BB),
+    (0xF4AF, 0x4EFC),
+    (0xF4B0, 0x50F4),
+    (0xF4B1, 0x51EC),
+    (0xF4B2, 0x5307),
+    (0xF4B3, 0x5324),
+    (0xF4B4, 0xFA0E),
+    (0xF4B5, 0x548A),
+    (0xF4B6, 0x5759),
+    (0xF4B7, 0xFA0F),
+    (0xF4B8, 0xFA10),
+    (0xF4B9, 0x589E),
+    (0xF4BA, 0x5BEC),
+    (0xF4BB, 0x5CF5),
+    (0xF4BC, 0x5D53),
+    (0xF4BD, 0xFA11),
+    (0xF4BE, 0x5FB7),
+    (0xF4BF, 0x6085),
+    (0xF4C0, 0x6120),
+    (0xF4C1, 0x654E),
+    (0xF4C2, 0x663B),
+    (0xF4C3, 0x6665),
+    (0xF4C4, 0xFA12),
+    (0xF4C5, 0xF929),
+    (0xF4C6, 0x6801),
+    (0xF4C7, 0xFA13),
+    (0xF4C8, 0xFA14),
+    (0xF4C9, 0x6A6B),
+    (0xF4CA, 0x6AE2),
+    (0xF4CB, 0x6DF8),
+    (0xF4CC, 0x6DF2),
+    (0xF4CD, 0x7028),
+    (0xF4CE, 0xFA15),
+    (0xF4CF, 0xFA16),
+    (0xF4D0, 0x7501),
+    (0xF4D1, 0x7682),
+    (0xF4D2, 0x769E),
+    (0xF4D3, 0xFA17),
+    (0xF4D4, 0x7930),
+    (0xF4D5, 0xFA18),
+    (0xF4D6, 0xFA19),
+    (0xF4D7, 0xFA1A),
+    (0xF4D8, 0xFA1B),
+    (0xF4D9, 0x7AE7),
+    (0xF4DA, 0xFA1C),
+    (0xF4DB, 0xFA1D),
+    (0xF4DC, 0x7DA0),
+    (0xF4DD, 0x7DD6),
+    (0xF4DE, 0xFA1E),
+    (0xF4DF, 0x8362),
+    (0xF4E0, 0xFA1F),
+    (0xF4E1, 0x85B0),
+    (0xF4E2, 0xFA20),
+    (0xF4E3, 0xFA21),
+    (0xF4E4, 0x8807),
+    (0xF4E5, 0xFA22),
+    (0xF4E6, 0x8B7F),
+    (0xF4E7, 0x8CF4),
+    (0xF4E8, 0x8D76),
+    (0xF4E9, 0xFA23),
+    (0xF4EA, 0xFA24),
+    (0xF4EB, 0xFA25),
+    (0xF4EC, 0x90DE),
+    (0xF4ED, 0xFA26),
+    (0xF4EE, 0x9115),
+    (0xF4EF, 0xFA27),
+    (0xF4F0, 0xFA28),
+    (0xF4F1, 0x9592),
+    (0xF4F2, 0xF9DC),
+    (0xF4F3, 0xFA29),
+    (0xF4F4, 0x973B),
+    (0xF4F5, 0x974D),
+    (0xF4F6, 0x9751),
+    (0xF4F7, 0xFA2A),
+    (0xF4F8, 0xFA2B),
+    (0xF4F9, 0xFA2C),
+    (0xF4FA, 0x999E),
+    (0xF4FB, 0x9AD9),
+    (0xF4FC, 0x9B72),
+    (0xF4FD, 0xFA2D),
+    (0xF4FE, 0x9ED1),
 ];
 
 /// ANSI_X3.4-1968

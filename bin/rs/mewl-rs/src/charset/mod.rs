@@ -5,18 +5,20 @@
 //! the conversion fails (see [`RENAMED`]). `mewl-rs-compat` does the
 //! same, knowing a name as glibc does: [`glibc::NAMES`] lists the names
 //! glibc knows for each converter emulated. A single-byte charset is
-//! converted by the table of glibc, and the others by encoding_rs or a
-//! decoder of mewl-rs.
+//! converted by the table of glibc, Shift_JIS and EUC-JP by
+//! [`crate::jis`], and the others by encoding_rs or a decoder of
+//! mewl-rs.
 //!
 //! `mewl-rs` knows the names of the Encoding Standard and, for the
 //! converters emulated, those of glibc as well, and converts a charset
 //! as the Encoding Standard does: a single-byte one by encoding_rs.
 
-mod glibc;
+pub mod glibc;
 
 use encoding_rs::{DecoderResult, Encoding};
 
 use crate::iso2022jp;
+use crate::jis;
 use crate::mime::Rules;
 use crate::utf7;
 
@@ -31,6 +33,8 @@ pub enum Converter {
     Utf7(utf7::Variant),
     /// A single-byte charset of glibc, for [`Rules::Glibc`].
     Single(&'static SingleByte),
+    /// Shift_JIS, EUC-JP, or a variant of glibc, for [`Rules::Glibc`].
+    Jis(jis::Variant),
 }
 
 /// A single-byte charset of glibc whose lower half is US-ASCII.
@@ -77,6 +81,7 @@ impl Converter {
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
             Converter::Single(table) => table.convert(input, keep_invalid),
+            Converter::Jis(variant) => jis::convert(variant, input, keep_invalid),
         }
     }
 
@@ -84,6 +89,7 @@ impl Converter {
     fn for_rfc(self) -> Self {
         match self {
             Converter::Single(table) => Converter::Encoding(table.encoding),
+            Converter::Jis(variant) => Converter::Encoding(variant.encoding()),
             converter => converter,
         }
     }
@@ -256,7 +262,7 @@ mod tests {
 
     #[test]
     fn glibc_names() {
-        let sjis = Some(Converter::Encoding(encoding_rs::SHIFT_JIS));
+        let sjis = Some(Converter::Jis(jis::Variant::ShiftJis));
         /* as glibc normalizes a name */
         for name in ["SJIS", "sjis", "Shift_JIS", "shift-jis", "MS_KANJI", "s!jis", "S~J+I'S"] {
             assert_eq!(glibc(name).map(|c| matches!(c, Charset::Glibc { name, .. } if name == sjis)), Some(true), "{name}");
@@ -268,7 +274,8 @@ mod tests {
         let cp949 = Some(Converter::Encoding(encoding_rs::EUC_KR));
         assert_eq!(glibc("KS_C_5601-1987"), Some(Charset::Glibc { name: cp949, retry: None }));
         assert_eq!(glibc("euc-kr"), Some(Charset::Glibc { name: cp949, retry: cp949 }));
-        assert_eq!(glibc("Shift_JIS"), Some(Charset::Glibc { name: sjis, retry: sjis }));
+        let cp932 = Some(Converter::Jis(jis::Variant::Cp932));
+        assert_eq!(glibc("Shift_JIS"), Some(Charset::Glibc { name: sjis, retry: cp932 }));
         let jp = Some(Converter::Iso2022Jp(iso2022jp::Variant::Jp));
         /* CP50221 is unknown to glibc */
         assert_eq!(glibc("iso-2022-jp"), Some(Charset::Glibc { name: jp, retry: None }));
@@ -304,8 +311,10 @@ mod tests {
     #[test]
     fn retried() {
         /* not Shift_JIS, but CP932 by glibc */
-        let charset = Charset::Glibc { name: None, retry: Some(Converter::Encoding(encoding_rs::SHIFT_JIS)) };
-        assert_eq!(charset.convert(b"\x87\x40"), Some("①".into()));
+        assert_eq!(decode("shift_jis", b"\x81\x60\\"), Some("〜¥".into()));
+        assert_eq!(decode("shift_jis", b"\x81\x60\\\x87\x40"), Some("～\\①".into()));
+        assert_eq!(decode("sjis", b"\x81\x60\\\x87\x40"), Some("〜¥\u{fffd}@".into()));
+        assert_eq!(decode("euc-jp", b"\xa1\xc1\xad\xa1"), Some("～①".into()));
         assert_eq!(Charset::Glibc { name: None, retry: None }.convert(b"a"), None);
     }
 }

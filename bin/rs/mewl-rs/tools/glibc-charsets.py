@@ -9,7 +9,8 @@ converter that mewl-rs-compat emulates, as glibc normalizes them. The
 names come from `iconv -l` and the converter of each from the
 gconv-modules files (the converters built into glibc, US-ASCII and
 UTF-8, are listed here). For a single-byte charset, it also takes the
-table of its upper half from glibc. Run it where glibc is the C
+table of its upper half from glibc, and for eucJP-ms the IBM extensions
+not in JIS X 0212. Run it where glibc is the C
 library; the output names the version of glibc.
 """
 
@@ -85,10 +86,10 @@ CONVERTERS = {
     "UTF-16BE": "Encoding(&UTF_16BE_INIT)",
     "UCS-2LE": "Encoding(&UTF_16LE_INIT)",
     "UCS-2BE": "Encoding(&UTF_16BE_INIT)",
-    "SJIS": "Encoding(&SHIFT_JIS_INIT)",
-    "CP932": "Encoding(&SHIFT_JIS_INIT)",
-    "EUC-JP": "Encoding(&EUC_JP_INIT)",
-    "EUC-JP-MS": "Encoding(&EUC_JP_INIT)",
+    "SJIS": "Jis(Jis::ShiftJis)",
+    "CP932": "Jis(Jis::Cp932)",
+    "EUC-JP": "Jis(Jis::EucJp)",
+    "EUC-JP-MS": "Jis(Jis::EucJpMs)",
     "BIG5": "Encoding(&BIG5_INIT)",
     "BIG5HKSCS": "Encoding(&BIG5_INIT)",
     "EUC-CN": "Encoding(&GBK_INIT)",
@@ -194,6 +195,7 @@ def main():
         "use super::Converter::{self, *};",
         "use super::SingleByte;",
         "use crate::iso2022jp::Variant as Jp;",
+        "use crate::jis::Variant as Jis;",
         "use crate::utf7::Variant as U7;",
         "",
         "/// The names of the converters emulated, normalized as glibc does",
@@ -209,6 +211,15 @@ def main():
 
     for key in sorted(table):
         lines.append(f'    (b"{key}", {rust(table[key])}), /* {table[key]} */')
+    lines.append("];")
+    lines += ["", "/// The IBM extensions of eucJP-ms in rows 83 and 84 of JIS X 0212,",
+              "/// which are not in JIS X 0212, and their code points.",
+              "pub static EUC_JP_MS_IBM: &[(u16, u16)] = &["]
+    for row in (0xF3, 0xF4):
+        for col in range(0xA1, 0xFF):
+            ch = iconv("EUC-JP-MS", bytes([0x8F, row, col]))
+            if ch:
+                lines.append(f"    (0x{row:02X}{col:02X}, 0x{ord(ch.decode()):04X}),")
     lines.append("];")
     for c, how in CONVERTERS.items():
         if isinstance(how, str):
