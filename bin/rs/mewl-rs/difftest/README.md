@@ -106,7 +106,7 @@ prints with what `mew-header-decode` makes of it.
 ```
 % ./mewcheck.py ../target/release/mewl-rs
 ...
-TOTAL: 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191854 same
+TOTAL: 23423 invalid, 10284 invalid to Mew only, 23709 no Unicode in Emacs, 826 private or unassigned to Mew, 199494 same
 ```
 
 With Emacs 30.2, none differ. "invalid" are codes that Emacs keeps
@@ -210,6 +210,10 @@ commit after main). The commands are run in this directory.
 | 22. guess charsets as Mew does in mewl-rs | `./difftest.py rs/21 rs/22 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 251 mismatches, on raw 8-bit headers (+inbox/16, +uni/83 and 84), charsets not known (+mime/19, +utf7/28, and 18 names in `+charset`, such as `x-unknown`, `utf-32`, and `euc_jp`), UTF-8 with an 8-bit byte between ASCII ones (+mime/26), and US-ASCII with 8-bit bytes (+charset/183) |
 | | `./mewcheck.py rs/22` | 0 differ (24 before, all in `us-ascii`) |
+
+| 23. decode gb2312 and cn-gb as GBK as Mew does in mewl-rs | `./difftest.py rs/22 rs/23 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 0 mismatches, as the corpus has neither character |
+| | `./mewcheck.py rs/23`, with the elisp of Mew which decodes `gb2312` and `cn-gb` as GBK | 0 differ (6 with rs/22: 0xA1A4 and 0xA1AA in `gb2312`, listed twice, and `cn-gb`) |
 
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is

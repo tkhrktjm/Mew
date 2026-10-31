@@ -105,7 +105,7 @@ Mew と同じく、つまり Emacs と同じように charset を復号する。
 ```
 % ./mewcheck.py ../target/release/mewl-rs
 ...
-TOTAL: 23296 invalid, 10283 invalid to Mew only, 22417 no Unicode in Emacs, 826 private or unassigned to Mew, 191854 same
+TOTAL: 23423 invalid, 10284 invalid to Mew only, 23709 no Unicode in Emacs, 826 private or unassigned to Mew, 199494 same
 ```
 
 Emacs 30.2 では、異なるものはない。"invalid" は、Emacs が生のバイトの
@@ -210,6 +210,10 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | 22. guess charsets as Mew does in mewl-rs | `./difftest.py rs/21 rs/22 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 251 mismatches: 8 ビットの生のヘッダ (+inbox/16、+uni/83 と 84)、未知の charset (+mime/19、+utf7/28、`+charset` の `x-unknown`、`utf-32`、`euc_jp` など 18 の名前)、ASCII の間に 8 ビットのバイトがある UTF-8 (+mime/26)、8 ビットのバイトを含む US-ASCII (+charset/183) |
 | | `./mewcheck.py rs/22` | 0 differ (以前は 24、すべて `us-ascii`) |
+
+| 23. decode gb2312 and cn-gb as GBK as Mew does in mewl-rs | `./difftest.py rs/22 rs/23 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7903 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 0 mismatches、コーパスにどちらの文字もないため |
+| | `gb2312` と `cn-gb` を GBK として復号する Mew の elisp で `./mewcheck.py rs/23` | 0 differ (rs/22 では 6: `gb2312` の 0xA1A4 と 0xA1AA が 2 回ずつ、と `cn-gb`) |
 
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で

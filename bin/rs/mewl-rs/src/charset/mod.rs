@@ -204,6 +204,10 @@ impl Charset {
                     /* the name of RFC 1642, which Mew knows */
                     return Some(Charset::Rfc(Converter::Utf7(utf7::Variant::Utf7)));
                 }
+                if [&b"gb2312"[..], b"cn-gb"].iter().any(|n| name.eq_ignore_ascii_case(n)) {
+                    /* Mew decodes them as GBK, which they often are. */
+                    return Some(Charset::Rfc(Converter::Encoding(GBK)));
+                }
                 /* glibc tells apart what the Encoding Standard does not,
                 such as Shift_JIS and CP932, or ISO-8859-1 and windows-1252. */
                 let converter = glibc_converter(name).map(Converter::for_rfc);
@@ -381,7 +385,6 @@ mod tests {
         assert_eq!(glibc("unicode-1-1-utf-7"), None);
         /* with a few characters as Emacs takes them */
         for (name, patch) in [
-            ("gb2312", Patch::Gb2312),
             ("chinese", Patch::Gb2312),
             ("euc-cn", Patch::Gb2312),
             ("gb18030", Patch::Gb18030),
@@ -394,7 +397,15 @@ mod tests {
         ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Patched(patch))), "{name}");
         }
-        for (name, encoding) in [("gbk", encoding_rs::GBK), ("x-gbk", encoding_rs::GBK), ("big5-hkscs", encoding_rs::BIG5)] {
+        /* GBK, as Mew decodes GB2312 */
+        for (name, encoding) in [
+            ("gbk", encoding_rs::GBK),
+            ("x-gbk", encoding_rs::GBK),
+            ("gb2312", encoding_rs::GBK),
+            ("GB2312", encoding_rs::GBK),
+            ("cn-gb", encoding_rs::GBK),
+            ("big5-hkscs", encoding_rs::BIG5),
+        ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Encoding(encoding))), "{name}");
         }
         /* Shift_JIS and EUC-JP, told from CP932 and eucJP-ms */

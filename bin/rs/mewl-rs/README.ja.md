@@ -79,8 +79,10 @@ difftest/README.ja.md を参照。
     も同様である。Shift_JIS と CP932 (`windows-31j`)、EUC-JP と eucJP-ms は
     glibc と同じように区別し、CP932 と eucJP-ms は Emacs と同じく Windows
     のもののままである。
-  - GB 2312 (GBK は除く) は、ISO-2022-JP-2 の中でも、0x2124 と 0x212A に
-    "・" (U+30FB) と "―" (U+2015) を持つ。GB18030 は、Encoding Standard
+  - `gb2312` と `cn-gb` は、Mew と同じく GBK である。それ以外の名前
+    (たとえば `euc-cn`) や推測した場合、ISO-2022-JP-2 の中の GB 2312 は、
+    Emacs の GB 2312 と同じく 0x2124 と 0x212A に "・" (U+30FB) と "―"
+    (U+2015) を持つ。GB18030 は、Encoding Standard
     が私用領域とする 6 文字に CJK 統合漢字拡張 B の文字を持つ。EUC-KR は
     "㉾" (U+327E) を持つ。Big5 (Big5-HKSCS は除く) は 0xF9FE に "▓"
     (U+2593) を持つ。

@@ -78,8 +78,10 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
     0x2171, 0x2172, and 0x224C. Shift_JIS is told from CP932
     (`windows-31j`) and EUC-JP from eucJP-ms as glibc does, and CP932
     and eucJP-ms keep those of Windows, as in Emacs.
-  - GB 2312 (but GBK), also in ISO-2022-JP-2, has "・" (U+30FB) and
-    "―" (U+2015) for 0x2124 and 0x212A; GB18030 has six characters of
+  - `gb2312` and `cn-gb` are GBK, as Mew decodes them. GB 2312 of
+    other names, such as `euc-cn`, guessed, or in ISO-2022-JP-2, has
+    "・" (U+30FB) and "―" (U+2015) for 0x2124 and 0x212A, as Emacs
+    takes GB 2312; GB18030 has six characters of
     CJK Extension B where the Encoding Standard has the Private Use
     Area; EUC-KR has "㉾" (U+327E); and Big5 (but Big5-HKSCS) has "▓"
     (U+2593) for 0xF9FE.
