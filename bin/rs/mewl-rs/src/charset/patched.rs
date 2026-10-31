@@ -12,7 +12,9 @@ use encoding_rs::{BIG5, EUC_KR, Encoding, GB18030, GBK};
 /// The charsets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Patch {
-    /// GB 2312 (EUC-CN), by GBK.
+    /// GB 2312 (EUC-CN), by GBK: what Emacs guesses, and names such as
+    /// `euc-cn`, which Mew does not know. Mew decodes `gb2312` and
+    /// `cn-gb` as GBK itself.
     Gb2312,
     Gb18030,
     /// EUC-KR, by the code page 949.
