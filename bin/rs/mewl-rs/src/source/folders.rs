@@ -4,7 +4,7 @@ use std::fs;
 use std::os::unix::ffi::OsStrExt;
 use std::vec;
 
-use super::{Entry, Message, Settings, open};
+use super::{Entry, Message, Settings, open_message};
 use crate::error::{Error, Result};
 use crate::folder::{FolderRange, parse_number};
 
@@ -37,7 +37,7 @@ impl FolderScanner {
         self.numbers.by_ref().find_map(|num| {
             [format!("{num}"), format!("0{num}")].into_iter().find_map(|name| {
                 let name = name.into_bytes();
-                let file = open(&[&name[..], suffix].concat()).or_else(|| open(&name))?;
+                let file = open_message(&[&name[..], suffix].concat()).or_else(|| open_message(&name))?;
                 Some(Message { file, name, folder: self.folder.clone() })
             })
         })
