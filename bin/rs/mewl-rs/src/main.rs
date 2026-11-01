@@ -46,7 +46,7 @@ use error::{Error, Reporter, Result};
 use flavor::Flavor;
 use output::Output;
 use printer::{Printed, Printer};
-use source::{Entry, FolderScanner, ListReader, RegularFileCheck, Source};
+use source::{Entry, FolderScanner, ListReader, Source, is_regular};
 
 fn main() -> ExitCode {
     sys::restore_sigpipe();
@@ -109,12 +109,11 @@ fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
     };
 
     let mut printer = Printer::new(mode, fields, opts.body_len, opts.field_len, flavor);
-    let mut regular = RegularFileCheck::new(flavor);
     for entry in source {
         match entry? {
             Entry::Count(n) => out.put(format!("NumOfMsg: {n}\n").as_bytes()).flush(),
             Entry::Message(mut msg) => {
-                if opts.use_fstat && !regular.is_regular(&msg.file) {
+                if opts.use_fstat && !is_regular(&msg.file) {
                     continue;
                 }
                 if printer.print(&mut msg, out)? == Printed::Record
