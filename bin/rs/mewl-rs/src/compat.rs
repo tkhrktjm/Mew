@@ -27,8 +27,8 @@ fn isspace(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
 }
 
-/// Whether `char` is signed in C on this platform.
-pub const CHAR_IS_SIGNED: bool = std::ffi::c_char::MIN != 0;
+/// `BUFSIZ` of glibc.
+pub const BUFSIZ: usize = 8192;
 
 #[cfg(test)]
 mod tests {
