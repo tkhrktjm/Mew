@@ -34,13 +34,13 @@ pub enum Printed {
 pub struct Printer {
     mode: Mode,
     fields: FieldSet,
-    body_len: i32,
+    body_len: u32,
     header: Header,
     flavor: Flavor,
 }
 
 impl Printer {
-    pub fn new(mode: Mode, fields: FieldSet, body_len: i32, field_len: i32, flavor: Flavor) -> Self {
+    pub fn new(mode: Mode, fields: FieldSet, body_len: u32, field_len: u32, flavor: Flavor) -> Self {
         Printer { mode, fields, body_len, header: Header::new(field_len, flavor), flavor }
     }
 

@@ -124,11 +124,10 @@ It also fixes some bugs of `mewl`:
   takes its body for the header.
 - A line with NUL in the list of `-i` does not hide the next line.
 - A number in a range and of `-c` and `-l` must be a decimal number;
-  `mewl` reads garbage as 0 and wraps a negative number around, so
-  `last:-3` means all. The error is "invalid range" or "invalid
-  number".
-- A file whose number is too large for `unsigned int` is not a
-  message. A message must be a regular file.
+  `mewl` reads garbage as 0, so `1-x` means from 1 on. The error is
+  "invalid range" or "invalid number", while `mewl` says "negative
+  number" or "number out of range".
+- A message must be a regular file.
 - The value of `-d key` without `:` does not begin with `:`.
 - A string in a pattern may be as long as it is. `mewl` keeps it in
   a buffer of `BUFSIZ` bytes, 8192 with glibc, and fails for 8192
