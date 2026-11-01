@@ -220,15 +220,38 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7903 run, 0 mismatches、コーパスにどちらの文字もないため |
 | | `gb2312` と `cn-gb` を GBK として復号する Mew の elisp で `./mewcheck.py rs/23` | 0 differ (rs/22 では 6: `gb2312` の 0xA1A4 と 0xA1AA が 2 回ずつ、と `cn-gb`) |
 
+| 24. read patterns as mewl of bc8d869 does in mewl-rs-compat | `./difftest.py C-bc8d869 rs/24 --name-b mewl-rs-compat` | 7945 run, 114 mismatches (rs/23 では 423): 負の数で 78、`UINT_MAX` を超える数で 7、番号が `INT_MAX` を超えるメッセージで 7、FIFO で 7、`+charset` の既知の 15 |
+| | `./difftest.py rs/23 rs/24 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 309 mismatches: 0xFF を含むランダムなパターン 305 と、8192 バイトの文字列 4 |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7945 run, 0 mismatches |
+
+| 25. read numbers as mewl of bc8d869 does | `./difftest.py C-bc8d869 rs/25 --name-b mewl-rs-compat` | 7945 run, 22 mismatches: FIFO で 7 と既知の 15 |
+| | `./difftest.py rs/24 rs/25 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 92 mismatches: 負の数で 78、`UINT_MAX` を超える数で 7、番号が `INT_MAX` を超えるメッセージで 7 |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7945 run, 7 mismatches、番号が `INT_MAX` を超えるメッセージと、`-l 3000000000` と `-l 4294967295` |
+
+| 26. open messages without blocking as mewl of bc8d869 does | `./difftest.py C-bc8d869 rs/26 --name-b mewl-rs-compat` | 7945 run, 15 mismatches、既知の 15 |
+| | `./difftest.py rs/25 rs/26 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 7945 run, 7 mismatches、すべて rs/25 がタイムアウトする FIFO |
+
+| 27. test regular files as mewl of bc8d869 does | `./difftest.py rs/26 rs/27 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 7945 run, 0 mismatches |
+
+| 28. compare with mewl of bc8d869 in the differential test | `./difftest.py C-bc8d869 rs/28 --name-b mewl-rs-compat` | 7945 run, 15 mismatches、既知の 15 |
+
+| 29. take the byte order of UTF-16 from its BOM in mewl-rs | `./difftest.py rs/28 rs/29 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 0 mismatches |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7945 run, 1 mismatch: BOM のない `utf-16`、`UTF-16`、`utf16` に対する `-d subject: +charset`、ビッグエンディアンになった |
+
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
 `+charset` を加えて作り直して 7572 が 7585 に、手順 17 で `+charset` に
 テキストを加えて 7880 に、手順 18 で Shift_JIS と EUC-JP のテキストを
 加えて 7901 に、手順 19 でそれに 0x213D を加えて 7903 になる。手順 16 から
-18 の行は、それぞれの手順のコーパスによる。
+18 の行は、それぞれの手順のコーパスによる。手順 24 から 29 の行は、
+`INT_MAX` と `UINT_MAX` 前後の番号、`BUFSIZ` 前後の文字列、FIFO を
+加えた手順 28 のコーパス (7945) による。
 
-mewl-rs-compat が変わるのは、main に従う手順 4、8、14、UTF-7 と
-ISO-2022-JP を復号する手順 10 と 15、charset 名を知り、1 バイト charset
-と Shift_JIS と EUC-JP を glibc と同じように変換する手順 16 から 18
-だけである。それ以外の手順では前と同じで、たとえば、ともに
-mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は 0 である。
+差分テストで見る限り、mewl-rs-compat が変わるのは、main に従う手順 4、
+8、14、24 から 26、UTF-7 と ISO-2022-JP を復号する手順 10 と 15、charset
+名を知り、1 バイト charset と Shift_JIS と EUC-JP を glibc と同じように
+変換する手順 16 から 18 だけである。それ以外の手順では前と同じで、
+たとえば、ともに mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は
+0 である。
+手順 27 も main に従うが、それはソケットと `fstat()` の失敗についてで、
+コーパスにはこれらがない。

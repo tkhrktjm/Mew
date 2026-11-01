@@ -7,6 +7,8 @@ Mew のメッセージ・スキャナ `mewl` を Rust に移植したもの。
 
 ## ビルド
 
+Linux や macOS などの Unix で動く。Windows ではまだ動かない。
+
 ```
 % cargo build --release
 ```

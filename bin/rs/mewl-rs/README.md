@@ -6,6 +6,8 @@ A Japanese translation is in [README.ja.md](README.ja.md).
 
 ## Build
 
+It runs on Unix, such as Linux and macOS, but not on Windows yet.
+
 ```
 % cargo build --release
 ```

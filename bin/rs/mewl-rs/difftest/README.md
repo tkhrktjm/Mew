@@ -220,17 +220,39 @@ commit after main). The commands are run in this directory.
 | | the same with `--name-a mewl-rs --name-b mewl-rs` | 7903 run, 0 mismatches, as the corpus has neither character |
 | | `./mewcheck.py rs/23`, with the elisp of Mew which decodes `gb2312` and `cn-gb` as GBK | 0 differ (6 with rs/22: 0xA1A4 and 0xA1AA in `gb2312`, listed twice, and `cn-gb`) |
 
+| 24. read patterns as mewl of bc8d869 does in mewl-rs-compat | `./difftest.py C-bc8d869 rs/24 --name-b mewl-rs-compat` | 7945 run, 114 mismatches (423 with rs/23): 78 on negative numbers, 7 on numbers over `UINT_MAX`, 7 on messages numbered over `INT_MAX`, 7 on the FIFO, and the 15 known in `+charset` |
+| | `./difftest.py rs/23 rs/24 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 309 mismatches: 305 fuzzed patterns with 0xFF and 4 strings of 8192 bytes |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7945 run, 0 mismatches |
+
+| 25. read numbers as mewl of bc8d869 does | `./difftest.py C-bc8d869 rs/25 --name-b mewl-rs-compat` | 7945 run, 22 mismatches: 7 on the FIFO and the 15 known |
+| | `./difftest.py rs/24 rs/25 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 92 mismatches: 78 on negative numbers, 7 on numbers over `UINT_MAX`, and 7 on messages numbered over `INT_MAX` |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7945 run, 7 mismatches, on messages numbered over `INT_MAX` and on `-l 3000000000` and `-l 4294967295` |
+
+| 26. open messages without blocking as mewl of bc8d869 does | `./difftest.py C-bc8d869 rs/26 --name-b mewl-rs-compat` | 7945 run, 15 mismatches, the 15 known |
+| | `./difftest.py rs/25 rs/26 --name-a mewl-rs-compat --name-b mewl-rs-compat`, and the same with `--name-a mewl-rs --name-b mewl-rs` | 7945 run, 7 mismatches each, all on the FIFO, where rs/25 times out |
+
+| 27. test regular files as mewl of bc8d869 does | `./difftest.py rs/26 rs/27 --name-a mewl-rs-compat --name-b mewl-rs-compat`, and the same with `--name-a mewl-rs --name-b mewl-rs` | 7945 run, 0 mismatches each |
+
+| 28. compare with mewl of bc8d869 in the differential test | `./difftest.py C-bc8d869 rs/28 --name-b mewl-rs-compat` | 7945 run, 15 mismatches, the 15 known |
+
+| 29. take the byte order of UTF-16 from its BOM in mewl-rs | `./difftest.py rs/28 rs/29 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 0 mismatches |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 7945 run, 1 mismatch: `-d subject: +charset` on `utf-16`, `UTF-16`, and `utf16` without a BOM, now big endian |
+
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is
 made again for step 16 with `+charset`, and those of 7572 become those
 of 7585, for step 17 with texts in `+charset`, 7880, for step 18 with
 texts in Shift_JIS and EUC-JP, 7901, and for step 19 with 0x213D in
 them, 7903. The rows of steps 16 to 18 are on the corpora of their
-steps.
+steps. The rows of steps 24 to 29 are on the corpus of step 28, with
+numbers around `INT_MAX` and `UINT_MAX`, strings around `BUFSIZ`, and
+a FIFO, 7945.
 
-mewl-rs-compat changes only in steps 4, 8, and 14, which follow main,
-in steps 10 and 15, which decode UTF-7 and ISO-2022-JP, and in steps
-16 to 18, which know charset names and convert single-byte charsets
-and Shift_JIS and EUC-JP as glibc does; in the other steps it is the
-same as before, e.g. 0 mismatches between rs/6 and rs/7 both invoked
-as mewl-rs-compat.
+As far as the differential test sees, mewl-rs-compat changes only in
+steps 4, 8, 14, and 24 to 26, which follow main, in steps 10 and 15,
+which decode UTF-7 and ISO-2022-JP, and in steps 16 to 18, which know
+charset names and convert single-byte charsets and Shift_JIS and
+EUC-JP as glibc does; in the other steps it is the same as before,
+e.g. 0 mismatches between rs/6 and rs/7 both invoked as
+mewl-rs-compat. Step 27 follows main as well, but on a socket and on
+a failure of `fstat()`, which the corpus does not have.
