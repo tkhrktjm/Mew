@@ -17,8 +17,10 @@ its own.
 
 Suites (--suite, all but wellformed by default):
 
-  base       options, folders and ranges, scan, sort (-d), -i, -e, -w,
-             errors, and 3000 fuzzed pick patterns
+  base       options, folders and ranges, numbers around INT_MAX and
+             UINT_MAX, scan, sort (-d), -i, -e, -w, a FIFO, errors,
+             strings of patterns around BUFSIZ, and 3000 fuzzed pick
+             patterns
   mime       pick and sort on encoded-words (folder +mime)
   uni        pick with Unicode case folding and NFC (folder +uni)
   utf7       pick and sort on encoded-words in UTF-7 (folder +utf7)
@@ -131,20 +133,23 @@ class Runner:
         self.total = 0
         self.mismatches = 0
 
-    def run(self, d, args, stdin):
+    def run(self, d, args, stdin, timeout):
         link, home = self.side[d]
         args = [x.replace(self.home, home) for x in args]
-        p = subprocess.run([link] + args, input=stdin, capture_output=True, cwd=self.cwd,
-                           env=dict(self.env, HOME=home), timeout=30)
+        try:
+            p = subprocess.run([link] + args, input=stdin, capture_output=True, cwd=self.cwd,
+                               env=dict(self.env, HOME=home), timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return ("timeout", b"", b"")
         norm = lambda b: b.replace(home.encode(), b"$HOME")
         name = os.path.basename(link).encode()
         err = re.sub(rb"(?m)^(PROG version) .*", rb"\1 VERSION", norm(p.stderr).replace(name, b"PROG"))
         return (p.returncode, norm(p.stdout), err)
 
-    def check(self, args, stdin=b""):
+    def check(self, args, stdin=b"", timeout=30):
         self.total += 1
-        a = self.run("a", args, stdin)
-        b = self.run("b", args, stdin)
+        a = self.run("a", args, stdin, timeout)
+        b = self.run("b", args, stdin, timeout)
         if a == b:
             return
         self.mismatches += 1
@@ -199,6 +204,32 @@ def suite_base(r):
             r.check(o + ["-e", os.path.join(HERE, "fake-inc")] + f, b"\n" * 100)
     r.check(["-w", "+inbox"], b"\n\n")
     r.check(["-w", "+inbox"], b"")
+    # numbers around INT_MAX and UINT_MAX, negative ones, and garbage
+    for f in [["+big"], ["+big", "2147483648"], ["+big", "4294967295"], ["+big", "4294967296"],
+              ["+big", "99999999999"], ["+big", "2-4294967295"], ["+big", "2-4294967296"], ["+big", "4294967296-"],
+              ["+big", "last:2"], ["+big", "last:4294967296"], ["+big", "last: -2"], ["+big", "1--3"],
+              ["+big", "x-2147483648y"], ["+big", "+2147483648"], ["-s", "+big last:-1"]]:
+        r.check(f)
+    for o in [["-l", "4294967295"], ["-l", "4294967296"], ["-l", "3000000000"], ["-c", "99999999999"],
+              ["-c", " -1"], ["-c", "+2"], ["-c", "2x"], ["-l", "-1", "-z"]]:
+        r.check(o + ["+big", "1"])
+    # strings of a pattern around BUFSIZ of glibc
+    for n in [8190, 8191, 8192]:
+        for p in [f"subject={'x' * n}", f'subject="{"x" * n}"', f"subject=\\{'x' * n}", f"{'x' * n}=a"]:
+            r.check(["-p", p, "+inbox"])
+    # a FIFO among messages, made here as copying the corpus fails on it
+    fifos = sorted({os.path.join(home, "Mail", "fifo", "2") for _, home in r.side.values()})
+    for fifo in fifos:
+        if not os.path.exists(fifo):
+            os.mkfifo(fifo)
+    try:
+        for o in [[], ["-n"], ["-d", "subject:"], ["-n", "-d", "subject:"], ["-p", "subject=e"]]:
+            r.check(o + ["+fifo"], timeout=5)
+        r.check(["-i", "-", "+fifo"], b"1\n2\n3\n", timeout=5)
+        r.check(["-n", "-i", "-", "+fifo"], b"1\n2\n3\n", timeout=5)
+    finally:
+        for fifo in fifos:
+            os.remove(fifo)
 
 
 def suite_mime(r):

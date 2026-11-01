@@ -29,7 +29,7 @@ The C mewl of a revision, with iconv and, if installed, utf8proc
 (libutf8proc-dev on Debian; the mewl of main uses it when found):
 
 ```
-% mkdir /tmp/c && git archive 464013a | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive bc8d869 | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
 
@@ -55,7 +55,7 @@ same as mewl.
 
 | suite | cases | what |
 |---|---:|---|
-| `base` | 3996 | options, folders and ranges, scan, sort (`-d`), `-i`, `-e`, `-w`, errors, and 3000 fuzzed pick patterns |
+| `base` | 4038 | options, folders and ranges, numbers around `INT_MAX` and `UINT_MAX`, scan, sort (`-d`), `-i`, `-e`, `-w`, a FIFO, errors, strings of patterns around `BUFSIZ`, and 3000 fuzzed pick patterns |
 | `mime` | 1227 | pick and sort on encoded-words of RFC 2047 |
 | `uni` | 1626 | pick with Unicode case folding and NFC |
 | `utf7` | 471 | pick and sort on encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid |
@@ -77,9 +77,9 @@ binary, to tell the effects of fixes apart:
 
 ## Expected results
 
-Against the C mewl of 464013a built with iconv and utf8proc 2.10
+Against the C mewl of bc8d869 built with iconv and utf8proc 2.10
 (without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 15
-of the 7903 cases, all in the `charset` suite, for the known
+of the 7945 cases, all in the `charset` suite, for the known
 differences in ../README.md: on encoded-words in charsets that glibc
 knows but mewl-rs does not (UTF-32, UCS-4, JOHAB, ISO-2022-KR,
 ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
@@ -88,8 +88,13 @@ ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7903 run, 15 mismatches
+TOTAL: 7945 run, 15 mismatches
 ```
+
+A run which does not end in 30 seconds, or in 5 for the FIFO, is
+taken as a timeout: the C mewl before bc8d869, and mewl-rs before it
+follows it, hang on the FIFO, which `difftest.py` makes in the corpus
+only while it runs those cases.
 
 The corpus has no lone low surrogate in UTF-7, which mewl-rs takes
 as invalid while glibc goes its own way (see src/utf7.rs).
