@@ -7,7 +7,7 @@
 
 use std::io::{self, Write};
 
-use crate::compat::atoi;
+use crate::compat::str_to_uint;
 use crate::error::{Error, Result};
 use crate::folder::{FolderRange, Navigator, parse_number};
 use crate::header::FieldSet;
@@ -63,7 +63,7 @@ pub struct Options {
     /// -b
     pub mail_home: Vec<u8>,
     /// -c
-    pub body_len: i32,
+    pub body_len: u32,
     /// -d
     pub sort_key: Option<Vec<u8>>,
     /// -e
@@ -75,7 +75,7 @@ pub struct Options {
     /// -i
     pub input_file: Option<Vec<u8>>,
     /// -l
-    pub field_len: i32,
+    pub field_len: u32,
     /// cleared by -n
     pub use_fstat: bool,
     /// -p
@@ -133,24 +133,22 @@ impl Options {
         }
     }
 
-    /// mewl reads a number in a range by `atoi()`, so that garbage is
-    /// 0 and a negative number wraps around. `mewl-rs` refuses them.
+    /// mewl reads a number in a range by `str_to_uint()`, so that
+    /// garbage is 0. `mewl-rs` refuses it.
     fn folder_range(&self, folder: Option<&[u8]>, range: Option<&[u8]>) -> Result<FolderRange> {
         if self.flavor.fixes_bugs() {
             FolderRange::parse_strict(folder, range)
         } else {
-            Ok(FolderRange::parse(folder, range))
+            FolderRange::parse(folder, range)
         }
     }
 
     /// The argument of `-c` or `-l`, likewise.
-    fn count(&self, arg: &[u8]) -> Result<i32> {
+    fn count(&self, arg: &[u8]) -> Result<u32> {
         if !self.flavor.fixes_bugs() {
-            return Ok(atoi(arg));
+            return str_to_uint(arg);
         }
-        parse_number(arg)
-            .and_then(|n| i32::try_from(n).ok())
-            .ok_or_else(|| Error::InvalidNumber(arg.to_vec()))
+        parse_number(arg).ok_or_else(|| Error::InvalidNumber(arg.to_vec()))
     }
 
     /// What is printed: pick (`-p`), sort (`-d`), or scan.

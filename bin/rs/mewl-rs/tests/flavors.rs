@@ -273,23 +273,32 @@ fn numbers() {
     let f = Fixture::new("numbers");
     let mail = f.dir.join("Mail");
     let b = ["-b", mail.to_str().unwrap()];
-    for (args, error) in [
-        (&["-c", "-1", "+inbox"][..], "mewl-rs: invalid number '-1'.\n"),
-        (&["-l", "x", "+inbox"], "mewl-rs: invalid number 'x'.\n"),
-        (&["+inbox", "last:-3"], "mewl-rs: invalid range 'last:-3'.\n"),
-        (&["-s", "+inbox 1-x"], "mewl-rs: invalid range '1-x'.\n"),
+    for (args, error, compat) in [
+        (&["-c", "-1", "+inbox"][..], "mewl-rs: invalid number '-1'.\n", Some("negative number: -1")),
+        (&["-l", "x", "+inbox"], "mewl-rs: invalid number 'x'.\n", None),
+        (&["+inbox", "last:-3"], "mewl-rs: invalid range 'last:-3'.\n", Some("negative number: -3")),
+        (&["-s", "+inbox 1-x"], "mewl-rs: invalid range '1-x'.\n", None),
+        (&["-l", "4294967296", "+inbox"], "mewl-rs: invalid number '4294967296'.\n", Some("number out of range: 4294967296")),
     ] {
         let args: Vec<_> = b.iter().chain(args).copied().collect();
         assert_eq!(f.run_raw("mewl-rs", &args), (false, String::new(), error.to_string()));
-        assert!(f.run_raw("mewl-rs-compat", &args).0);
+        let (ok, _, stderr) = f.run_raw("mewl-rs-compat", &args);
+        match compat {
+            Some(e) => assert_eq!((ok, stderr), (false, format!("mewl-rs-compat: {e}\n"))),
+            None => assert!(ok),
+        }
     }
     assert_eq!(f.run("mewl-rs", &["-d", "subject:", "+inbox", "-3"]), f.run("mewl-rs", &["-d", "subject:", "+inbox", "1-3"]));
+    assert!(f.run_raw("mewl-rs", &b.iter().chain(&["-l", "4294967295", "+inbox"]).copied().collect::<Vec<_>>()).0);
 
-    /* A number too large is not a message, while mewl counts it. */
+    /* A number too large for unsigned int is not a message, and one
+    over INT_MAX is. */
     f.write("c/1", b"Subject: one\n\n");
-    f.write("c/99999999999", b"Subject: large\n\n");
-    assert!(f.run("mewl-rs", &["-f", "Subject:", "+c"]).starts_with("NumOfMsg: 1\n"));
-    assert!(f.run("mewl-rs-compat", &["-f", "Subject:", "+c"]).starts_with("NumOfMsg: 2\n"));
+    f.write("c/3000000000", b"Subject: large\n\n");
+    f.write("c/99999999999", b"Subject: too large\n\n");
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run(name, &["-d", "subject:", "+c"]), "1: one\n3000000000: large\n", "{name}");
+    }
 }
 
 #[test]

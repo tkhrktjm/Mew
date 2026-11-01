@@ -22,6 +22,11 @@ pub enum Error {
     InvalidRange(Vec<u8>),
     /// An argument of `-c` or `-l` not a number.
     InvalidNumber(Vec<u8>),
+    /// A number of a range or of `-c` or `-l` beginning with `-`, for
+    /// `mewl-rs-compat`.
+    NegativeNumber(Vec<u8>),
+    /// A number too large for `unsigned int`, likewise.
+    NumberOutOfRange(Vec<u8>),
     /// `-s` with folder operands.
     SourceWithOperands,
     NoHomeDirectory,
@@ -52,6 +57,8 @@ impl Error {
             Error::TooManyFolders => b"too many folders.".to_vec(),
             Error::InvalidRange(range) => quoted("invalid range '", range, "'."),
             Error::InvalidNumber(num) => quoted("invalid number '", num, "'."),
+            Error::NegativeNumber(num) => quoted("negative number: ", num, ""),
+            Error::NumberOutOfRange(num) => quoted("number out of range: ", num, ""),
             Error::SourceWithOperands => b"the 's' option can't co-exist with arguments.".to_vec(),
             Error::NoHomeDirectory => b"failed in getting home directory.".to_vec(),
             Error::HomeUnknown => b"can't change directory to home.".to_vec(),

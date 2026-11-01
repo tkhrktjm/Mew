@@ -42,13 +42,13 @@ pub struct Header {
     buf: Box<[u8]>,
     len: usize,
     /// The max number of lines of a field. 0 means no limit.
-    field_len: i32,
+    field_len: u32,
     /// How pick decodes values (see [`Header::search`]).
     flavor: Flavor,
 }
 
 impl Header {
-    pub fn new(field_len: i32, flavor: Flavor) -> Self {
+    pub fn new(field_len: u32, flavor: Flavor) -> Self {
         Header {
             buf: vec![0; MAX_HEADER].into_boxed_slice(),
             len: 0,
@@ -131,7 +131,7 @@ impl Header {
 
     /// Skips the field beginning at `p` with its continuation lines.
     fn next_field(&mut self, p: usize, header_only: bool) -> FieldEnd {
-        let mut lines: i32 = 0;
+        let mut lines: u32 = 0;
         let mut truncated = None;
         let mut line = p;
         loop {
@@ -184,7 +184,7 @@ impl Header {
 
     /// For scan: finds `fields` in the header and the first `body_len`
     /// lines of the body.
-    pub fn summarize(&mut self, fields: &FieldSet, body_len: i32) -> Summary {
+    pub fn summarize(&mut self, fields: &FieldSet, body_len: u32) -> Summary {
         let mut found: Vec<Option<Range<usize>>> = vec![None; fields.names().len()];
         let mut body_beg = self.has_empty_header().then_some(1);
         let mut p = 0;
@@ -218,8 +218,7 @@ impl Header {
 
         let mut body = Vec::new();
         if let Some(mut p) = body_beg {
-            /* A negative length means no limit like unsigned in C. */
-            for _ in 0..body_len as u32 {
+            for _ in 0..body_len {
                 let q = p;
                 match self.next_line(q, false) {
                     Some(next) => {
@@ -294,7 +293,7 @@ impl Header {
 mod tests {
     use super::*;
 
-    fn header(mut data: &[u8], field_len: i32, flavor: Flavor) -> Header {
+    fn header(mut data: &[u8], field_len: u32, flavor: Flavor) -> Header {
         let mut h = Header::new(field_len, flavor);
         h.load(&mut data);
         h

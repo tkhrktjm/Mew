@@ -1,24 +1,25 @@
 //! Behavior of the C library that mewl relies on.
 
-/// `atoi()` of glibc, that is, `(int)strtol(s, NULL, 10)`.
+use crate::error::{Error, Result};
+
+/// `str_to_uint()` of mewl, by `strtoul()` of glibc.
 ///
-/// Garbage gives 0, an overflow saturates to `long` and then is
-/// truncated to `int`.
-pub fn atoi(s: &[u8]) -> i32 {
+/// Garbage gives 0 as `atoi()` did, and what follows the digits is
+/// ignored, but a negative number or one too large for `unsigned int`
+/// is an error.
+pub fn str_to_uint(s: &[u8]) -> Result<u32> {
     let blanks = s.iter().take_while(|&&c| isspace(c)).count();
-    let s = &s[blanks..];
-    let (negative, digits) = match s.split_first() {
-        Some((b'-', rest)) => (true, rest),
-        Some((b'+', rest)) => (false, rest),
-        _ => (false, s),
+    let rest = &s[blanks..];
+    let digits = match rest.split_first() {
+        Some((b'-', _)) => return Err(Error::NegativeNumber(s.to_vec())),
+        Some((b'+', digits)) => digits,
+        _ => rest,
     };
-    let value = digits
+    digits
         .iter()
         .take_while(|c| c.is_ascii_digit())
-        .fold(0i128, |acc, &c| (acc * 10 + i128::from(c - b'0')).min(1 << 64));
-    let value = if negative { -value } else { value };
-    let long = value.clamp(i64::MIN.into(), i64::MAX.into()) as i64;
-    long as i32
+        .try_fold(0u32, |n, &c| n.checked_mul(10)?.checked_add(u32::from(c - b'0')))
+        .ok_or_else(|| Error::NumberOutOfRange(s.to_vec()))
 }
 
 /// `isspace()` in the C locale. Unlike `u8::is_ascii_whitespace()`,
@@ -32,18 +33,22 @@ pub const BUFSIZ: usize = 8192;
 
 #[cfg(test)]
 mod tests {
-    use super::atoi;
+    use super::str_to_uint;
+    use crate::error::Error;
 
     #[test]
-    fn atoi_like_glibc() {
-        assert_eq!(atoi(b"123"), 123);
-        assert_eq!(atoi(b"  -42abc"), -42);
-        assert_eq!(atoi(b"\x0b5"), 5);
-        assert_eq!(atoi(b"+7"), 7);
-        assert_eq!(atoi(b"abc"), 0);
-        assert_eq!(atoi(b""), 0);
-        assert_eq!(atoi(b"99999999999"), 1215752191);
-        assert_eq!(atoi(b"99999999999999999999"), -1);
-        assert_eq!(atoi(b"-99999999999999999999"), 0);
+    fn str_to_uint_like_mewl() {
+        assert_eq!(str_to_uint(b"123"), Ok(123));
+        assert_eq!(str_to_uint(b"  42abc"), Ok(42));
+        assert_eq!(str_to_uint(b"\x0b5"), Ok(5));
+        assert_eq!(str_to_uint(b"+7"), Ok(7));
+        assert_eq!(str_to_uint(b"abc"), Ok(0));
+        assert_eq!(str_to_uint(b""), Ok(0));
+        assert_eq!(str_to_uint(b"+-3"), Ok(0));
+        assert_eq!(str_to_uint(b"4294967295"), Ok(u32::MAX));
+        assert_eq!(str_to_uint(b"4294967296"), Err(Error::NumberOutOfRange(b"4294967296".to_vec())));
+        assert_eq!(str_to_uint(b"99999999999999999999x"), Err(Error::NumberOutOfRange(b"99999999999999999999x".to_vec())));
+        assert_eq!(str_to_uint(b" -3"), Err(Error::NegativeNumber(b" -3".to_vec())));
+        assert_eq!(str_to_uint(b"-0"), Err(Error::NegativeNumber(b"-0".to_vec())));
     }
 }
