@@ -208,8 +208,5 @@ not by utf8proc. So a few results differ from `mewl`'s:
 - Characters new in a version of Unicode which one of them does not
   know yet may be normalized differently.
 
-Two more things differ from `mewl`, which Mew does not depend on:
-
-- `-v` prints the version of mewl-rs, not that of Mew.
-- `mewl` duplicates stdin as file descriptor 3, which the command of
-  `-e` inherits; mewl-rs does not.
+One more thing differs from `mewl`, which Mew does not depend on:
+`-v` prints the version of mewl-rs, not that of Mew.

@@ -33,7 +33,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 7
+VERSION = 8
 
 
 def w(path, data):
@@ -72,6 +72,10 @@ def make_base(mail):
     w(f"{mail}/my folder/2", b"Subject: second\n\nhi\n")
     w(f"{mail}/a/b/3", b"Subject: nested\nFrom: nest@x\n\nhi\n")
     os.makedirs(f"{mail}/empty", exist_ok=True)
+    for n in ["1", "2147483647", "2147483648", "02147483649", "4294967295", "4294967296", "99999999999"]:
+        w(f"{mail}/big/{n}", b"Subject: number %s\n\n" % n.encode())                # around INT_MAX and UINT_MAX
+    w(f"{mail}/fifo/1", b"Subject: before\n\n")                                     # difftest.py makes the FIFO 2
+    w(f"{mail}/fifo/3", b"Subject: after\n\n")
     random.seed(42)
     names = [b"Subject:", b"From:", b"To:", b"Cc:", b"Date:", b"References:", b"X-Foo:", b"Content-Type:", b"Message-ID:", b"subject:", b"FROM:"]
     words = [b"foo", b"Bar", b"BAZ", b"qux", b"<id@x>", b".", b"..", b"", b"\xe3\x81\x82", b"\t", b"x"*100]
