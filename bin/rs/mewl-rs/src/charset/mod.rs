@@ -17,15 +17,16 @@
 //! Windows; Shift_JIS and EUC-JP, told from CP932 and eucJP-ms as glibc
 //! does, with seven characters of JIS X 0208 as Emacs takes them
 //! ([`crate::jis`]); GB 2312, GB18030, EUC-KR, and Big5 with a few
-//! characters as Emacs takes them ([`patched`]); and the rest by
-//! encoding_rs. Where Mew guesses, so does `mewl-rs` ([`crate::guess`]):
-//! a charset not known, US-ASCII with an 8-bit byte, and UTF-8 with an
-//! 8-bit byte between ASCII ones.
+//! characters as Emacs takes them ([`patched`]); UTF-16 as RFC 2781
+//! specifies, big endian without a BOM; and the rest by encoding_rs.
+//! Where Mew guesses, so does `mewl-rs` ([`crate::guess`]): a charset
+//! not known, US-ASCII with an 8-bit byte, and UTF-8 with an 8-bit
+//! byte between ASCII ones.
 
 pub mod glibc;
 pub mod patched;
 
-use encoding_rs::{BIG5, DecoderResult, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS, UTF_8};
+use encoding_rs::{BIG5, DecoderResult, EUC_JP, EUC_KR, Encoding, GB18030, GBK, SHIFT_JIS, UTF_8, UTF_16BE, UTF_16LE};
 
 use crate::guess;
 use crate::iso2022jp;
@@ -43,6 +44,9 @@ pub enum Converter {
     Iso2022Jp(iso2022jp::Variant),
     /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
     Utf7(utf7::Variant),
+    /// UTF-16 as RFC 2781 specifies, for [`Rules::Rfc`]: in the byte
+    /// order of its BOM, which is removed, or big endian without one.
+    Utf16,
     /// A single-byte charset of glibc, for [`Rules::Glibc`].
     Single(&'static SingleByte),
     /// Shift_JIS, EUC-JP, or a variant.
@@ -114,6 +118,14 @@ impl Converter {
             Converter::Encoding(encoding) => convert(encoding, input, keep_invalid),
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
+            Converter::Utf16 => {
+                let (encoding, text) = match input {
+                    [0xff, 0xfe, text @ ..] => (UTF_16LE, text),
+                    [0xfe, 0xff, text @ ..] => (UTF_16BE, text),
+                    text => (UTF_16BE, text),
+                };
+                Converter::Encoding(encoding).convert(text, rules, keep_invalid)
+            }
             Converter::Single(table) => table.convert(input, rules, keep_invalid),
             Converter::Jis(variant) => jis::convert(variant, rules, input, keep_invalid),
             Converter::Patched(patch) if rules == Rules::Rfc => patched::convert(patch, input, keep_invalid),
@@ -200,6 +212,11 @@ impl Charset {
                 if let Some(variant) = utf7::Variant::for_charset(name) {
                     return Some(Charset::Rfc(Converter::Utf7(variant)));
                 }
+                if matches!(normalize(name).as_slice(), b"UTF-16" | b"UTF16") {
+                    /* big endian without a BOM, as Emacs takes it, not
+                    little endian as the Encoding Standard does */
+                    return Some(Charset::Rfc(Converter::Utf16));
+                }
                 if name.eq_ignore_ascii_case(b"unicode-1-1-utf-7") {
                     /* the name of RFC 1642, which Mew knows */
                     return Some(Charset::Rfc(Converter::Utf7(utf7::Variant::Utf7)));
@@ -228,9 +245,10 @@ impl Charset {
     /// Whether adjacent encoded-words in this charset may be converted
     /// together. Not for a stateful charset whose encoded-word begins
     /// and ends in its initial state, ISO-2022-JP and UTF-7: joined, a
-    /// shift right after another one would be an error.
+    /// shift right after another one would be an error. Nor for UTF-16,
+    /// each encoded-word of which may begin with a BOM.
     pub fn joinable(self) -> bool {
-        !matches!(self, Charset::Rfc(Converter::Iso2022Jp(_) | Converter::Utf7(_)))
+        !matches!(self, Charset::Rfc(Converter::Iso2022Jp(_) | Converter::Utf7(_) | Converter::Utf16))
     }
 
     /// Converts `input` to UTF-8; `None` if it fails. As mewl does,
@@ -421,6 +439,25 @@ mod tests {
         ] {
             assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Jis(variant))), "{name}");
         }
+    }
+
+    #[test]
+    fn utf16() {
+        for name in ["utf-16", "UTF-16", "utf16", "utf~16"] {
+            assert_eq!(rfc(name), Some(Charset::Rfc(Converter::Utf16)), "{name}");
+        }
+        assert_eq!(rfc("utf-16le"), Some(Charset::Rfc(Converter::Encoding(UTF_16LE))));
+        assert_eq!(rfc("utf-16be"), Some(Charset::Rfc(Converter::Encoding(UTF_16BE))));
+        assert!(!rfc("utf-16").unwrap().joinable());
+        let conv = |input: &[u8]| String::from_utf8(rfc("utf-16").unwrap().convert(input).unwrap()).unwrap();
+        assert_eq!(conv(b"\x5c\x71\x75\x30"), "山田");
+        assert_eq!(conv(b"\xfe\xff\x5c\x71\x75\x30"), "山田");
+        assert_eq!(conv(b"\xff\xfe\x71\x5c\x30\x75"), "山田");
+        assert_eq!(conv(b"\x71\x5c\x30\x75"), "煜ふ");
+        /* a BOM after the first is U+FEFF, and what is invalid U+FFFD */
+        assert_eq!(conv(b"\xfe\xff\xfe\xff\xd8\x00"), "\u{feff}\u{fffd}");
+        /* mewl-rs-compat as before */
+        assert_eq!(decode("utf-16", b"\xff\xfe\x71\x5c\x30\x75"), Some("\u{feff}山田".into()));
     }
 
     #[test]

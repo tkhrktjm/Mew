@@ -89,6 +89,11 @@ difftest/README.ja.md を参照。
   - Big5 の拡張のほとんどのように Emacs が私用領域の文字を持つところや、
     JIS X 0208 の NEC 特殊文字のように Unicode の文字を持たないところは、
     Encoding Standard のとおりである。たとえば "①"。
+  - Mew が知らない UTF-16 (`utf-16`) は、RFC 2781 の規定および Emacs の
+    解釈と同じく、バイト順マークがあればそのバイト順で読んでマークを
+    取り除き、なければビッグエンディアンで読む。Encoding Standard の
+    ようにリトルエンディアンとはしない。`utf-16be` と `utf-16le` は
+    それぞれのバイト順で読む。
   `difftest/mewcheck.py` は、これを Emacs 上の Mew と符号ごとに比べる。
 - encoded-word の charset や生の ISO-2022-JP で不正なバイト列は、
   Encoding Standard と同じく最大部分ごとに一つずつ U+FFFD (REPLACEMENT

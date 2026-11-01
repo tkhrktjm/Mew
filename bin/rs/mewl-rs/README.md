@@ -89,6 +89,11 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
     of the extensions of Big5, or none in Unicode, such as the NEC
     special characters of JIS X 0208, it is as the Encoding Standard
     takes it, e.g. "①".
+  - UTF-16 (`utf-16`), which Mew does not know, is in the byte order
+    of its byte order mark, which is removed, or big endian without
+    one, as RFC 2781 specifies and Emacs takes it, not little endian as
+    in the Encoding Standard. `utf-16be` and `utf-16le` are in their
+    own orders.
   `difftest/mewcheck.py` compares this with Mew in Emacs, code by code.
 - An invalid byte sequence in the charset of an encoded-word, or in
   raw ISO-2022-JP, is replaced with U+FFFD (REPLACEMENT CHARACTER),
