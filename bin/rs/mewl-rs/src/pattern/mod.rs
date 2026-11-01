@@ -26,6 +26,8 @@ pub enum PatternError {
     TooManyOpening,
     BrokenNot,
     BrokenAndOr,
+    /// A string longer than mewl takes.
+    TooLong,
     /// Found only when evaluated.
     BrokenTree,
     /// Not one expression, in the strict syntax.
@@ -45,6 +47,7 @@ impl PatternError {
             PatternError::TooManyOpening => "too many '('.",
             PatternError::BrokenNot => "broken not.",
             PatternError::BrokenAndOr => "broken and/or.",
+            PatternError::TooLong => "pattern string is too long.",
             PatternError::BrokenTree => "broken tree.",
             PatternError::Broken => "broken pattern.",
         }

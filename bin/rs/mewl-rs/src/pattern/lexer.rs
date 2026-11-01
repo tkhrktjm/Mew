@@ -3,7 +3,7 @@
 use std::ops::Range;
 
 use super::{Cmp, PatternError, Result};
-use crate::compat::CHAR_IS_SIGNED;
+use crate::compat::BUFSIZ;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
@@ -45,8 +45,8 @@ pub struct Lexer<'a> {
     pos: usize,
     /// The token just read ended at a blank, which is consumed.
     blank_ended: bool,
-    /// Without the bugs of mewl in reading (see [`Lexer::getc`] and
-    /// the comparisons in [`Lexer::read_token`]).
+    /// Without the bugs of mewl in reading (see the comparisons in
+    /// [`Lexer::read_token`]) and its limit (see [`Lexer::push`]).
     strict: bool,
 }
 
@@ -56,14 +56,21 @@ impl<'a> Lexer<'a> {
     }
 
     /// The next character, `None` at the end.
-    ///
-    /// When `char` is signed, the byte 0xff is `EOF` (-1) in mewl.
-    /// It is consumed nevertheless, so reading can go on after it. Not
-    /// so when strict.
     fn getc(&mut self) -> Option<u8> {
         let c = *self.input.get(self.pos)?;
         self.pos += 1;
-        (self.strict || !(CHAR_IS_SIGNED && c == 0xff)).then_some(c)
+        Some(c)
+    }
+
+    /// Appends `c` to the string of a token. mewl keeps it in a buffer
+    /// of `BUFSIZ` bytes with NUL at the end, and fails for more; not
+    /// so when strict.
+    fn push(&self, s: &mut Vec<u8>, c: u8) -> Result<()> {
+        if !self.strict && s.len() >= BUFSIZ - 1 {
+            return Err(PatternError::TooLong);
+        }
+        s.push(c);
+        Ok(())
     }
 
     /// Steps back even after the end, as `Ungetc()` does.
@@ -79,8 +86,7 @@ impl<'a> Lexer<'a> {
         self.getc().ok_or(PatternError::BrokenEscape)
     }
 
-    /// The next token. `None` at the end of the pattern (or at 0xff,
-    /// see [`Lexer::getc`]).
+    /// The next token. `None` at the end of the pattern.
     pub fn next_token(&mut self) -> Result<Option<Spanned>> {
         let mut start = self.pos;
         self.blank_ended = false;
@@ -110,11 +116,12 @@ impl<'a> Lexer<'a> {
                 b'"' => return self.quoted().map(Some),
                 b'\\' => {
                     kind = Kind::Str;
-                    s.push(self.escaped()?);
+                    let c = self.escaped()?;
+                    self.push(&mut s, c)?;
                 }
                 _ => {
                     kind = Kind::Str;
-                    s.push(c);
+                    self.push(&mut s, c)?;
                 }
             }
             break;
@@ -139,11 +146,12 @@ impl<'a> Lexer<'a> {
                 b'&' | b'|' | b'!' | b'=' | b'(' | b')' => self.ungetc()?,
                 _ if kind != Kind::Str => self.ungetc()?,
                 b'\\' => {
-                    s.push(self.escaped()?);
+                    let c = self.escaped()?;
+                    self.push(&mut s, c)?;
                     continue;
                 }
                 _ => {
-                    s.push(c);
+                    self.push(&mut s, c)?;
                     continue;
                 }
             }
@@ -165,9 +173,12 @@ impl<'a> Lexer<'a> {
         let mut s = Vec::new();
         while let Some(c) = self.getc() {
             match c {
-                b'\\' => s.push(self.escaped()?),
+                b'\\' => {
+                    let c = self.escaped()?;
+                    self.push(&mut s, c)?;
+                }
                 b'"' => return Ok(Token::Str(s)),
-                _ => s.push(c),
+                _ => self.push(&mut s, c)?,
             }
         }
         Err(PatternError::BrokenQuotedString)
@@ -206,14 +217,25 @@ mod tests {
     fn strict() {
         let strict = |p: &[u8]| Lexer::new(p, true).map(|t| t.map(|t| t.token)).collect::<Result<Vec<_>>>().unwrap();
         /* 0xff is a byte, not the end. */
-        assert_eq!(strict(b"a=\xffb"), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"\xffb".to_vec())]);
-        if CHAR_IS_SIGNED {
-            /* mewl drops it, ending the token before it. */
-            assert_eq!(tokens(b"a=\xffb"), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"b".to_vec())]);
-        }
+        let ff = [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"\xffb".to_vec())];
+        assert_eq!(strict(b"a=\xffb"), ff);
+        assert_eq!(tokens(b"a=\xffb"), ff);
         /* "!=" at the end. */
         assert_eq!(strict(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne)]);
         assert_eq!(tokens(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne), Token::Cmp(Cmp::Eq)]);
+    }
+
+    #[test]
+    fn too_long() {
+        let lex = |p: &[u8], strict| Lexer::new(p, strict).map(|t| t.map(|t| t.token)).collect::<Result<Vec<_>>>();
+        /* BUFSIZ - 1 bytes at most, an escaped one ("\\x") included */
+        for (pre, post, kept) in [("", "", 0), ("\"", "\"", 0), ("a=", "", 0), ("\\x", "", 1)] {
+            let max = [pre.as_bytes(), &vec![b'x'; BUFSIZ - 1 - kept], post.as_bytes()].concat();
+            assert!(lex(&max, false).is_ok(), "{pre}");
+            let over = [pre.as_bytes(), &vec![b'x'; BUFSIZ - kept], post.as_bytes()].concat();
+            assert_eq!(lex(&over, false), Err(PatternError::TooLong), "{pre}");
+            assert!(lex(&over, true).is_ok(), "{pre}");
+        }
     }
 
     #[test]
