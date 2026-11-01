@@ -11,9 +11,9 @@ mod folders;
 mod list;
 
 use std::ffi::OsStr;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 
 pub use folders::FolderScanner;
 pub use list::ListReader;
@@ -96,6 +96,13 @@ impl RegularFileCheck {
 
 fn open(name: &[u8]) -> Option<File> {
     File::open(OsStr::from_bytes(name)).ok()
+}
+
+/// Opens a message without blocking, as mewl does, so that a FIFO
+/// without a writer does not hang; it is not a regular file, and read
+/// with `-n`, it is empty.
+fn open_message(name: &[u8]) -> Option<File> {
+    OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(OsStr::from_bytes(name)).ok()
 }
 
 fn check_folder_name(folder: &[u8]) -> Result<()> {

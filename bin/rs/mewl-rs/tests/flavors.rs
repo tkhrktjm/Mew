@@ -3,9 +3,12 @@
 //! the name it is invoked by, through a link for instance.
 
 use std::fs;
+use std::io::Read;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 struct Fixture {
     dir: PathBuf,
@@ -52,20 +55,14 @@ impl Fixture {
             "mewl-rs-compat" => self.dir.join("link/mewl-rs-compat"),
             _ => self.dir.join(prog),
         };
-        let out = Command::new(path)
-            .env("LC_ALL", locale)
-            .arg("-b")
-            .arg(self.dir.join("Mail"))
-            .args(args)
-            .output()
-            .unwrap();
+        let out = output(Command::new(path).env("LC_ALL", locale).arg("-b").arg(self.dir.join("Mail")).args(args));
         assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8(out.stdout).unwrap()
     }
 
     /// Runs `link/prog` with `args` as they are: (success, stdout, stderr).
     fn run_raw(&self, prog: &str, args: &[&str]) -> (bool, String, String) {
-        let out = Command::new(self.dir.join("link").join(prog)).args(args).output().unwrap();
+        let out = output(Command::new(self.dir.join("link").join(prog)).args(args));
         let text = |b: Vec<u8>| String::from_utf8_lossy(&b).into_owned();
         (out.status.success(), text(out.stdout), text(out.stderr))
     }
@@ -81,6 +78,35 @@ impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.dir);
     }
+}
+
+/// [`Command::output`] failing if the command does not end in 10
+/// seconds, rather than hanging. Its stdout and stderr are read while
+/// it runs, so that it does not wait for a full pipe to be read.
+fn output(command: &mut Command) -> Output {
+    let mut child = command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let stdout = read_all(child.stdout.take().unwrap());
+    let stderr = read_all(child.stderr.take().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() > deadline {
+            child.kill().unwrap();
+            panic!("{command:?} did not end");
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    Output { status, stdout: stdout.join().unwrap(), stderr: stderr.join().unwrap() }
+}
+
+fn read_all(mut pipe: impl Read + Send + 'static) -> JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut data = Vec::new();
+        pipe.read_to_end(&mut data).unwrap();
+        data
+    })
 }
 
 #[test]
@@ -211,10 +237,10 @@ fn broken_patterns_refused() {
         ("mewl-rs", "plain", Some("mewl-rs: broken pattern.\n")),
         ("mewl-rs-compat", "subject=plain from=zzz", None),
     ] {
-        let out = Command::new(f.dir.join("link").join(prog))
-            .args(["-b", f.dir.join("Mail").to_str().unwrap(), "-p", pattern, "+inbox"])
-            .output()
-            .unwrap();
+        let out = output(
+            Command::new(f.dir.join("link").join(prog))
+                .args(["-b", f.dir.join("Mail").to_str().unwrap(), "-p", pattern, "+inbox"]),
+        );
         match expected {
             Some(message) => {
                 assert_eq!(String::from_utf8_lossy(&out.stderr), message);
@@ -298,6 +324,19 @@ fn numbers() {
     f.write("c/99999999999", b"Subject: too large\n\n");
     for name in ["mewl-rs", "mewl-rs-compat"] {
         assert_eq!(f.run(name, &["-d", "subject:", "+c"]), "1: one\n3000000000: large\n", "{name}");
+    }
+}
+
+#[test]
+fn fifo() {
+    let f = Fixture::new("fifo");
+    f.write("f/1", b"Subject: one\n\n");
+    let fifo = f.dir.join("Mail/f/2");
+    assert!(Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+    /* opened without blocking, and not a regular file, or empty with -n */
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run(name, &["-d", "subject:", "+f"]), "1: one\n", "{name}");
+        assert_eq!(f.run(name, &["-n", "-d", "subject:", "+f"]), "1: one\n2: \n", "{name}");
     }
 }
 

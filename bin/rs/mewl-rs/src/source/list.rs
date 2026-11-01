@@ -8,7 +8,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::os::unix::ffi::OsStrExt;
 use std::process::{Command, Stdio};
 
-use super::{Entry, MAX_FILE_NAME_LEN, Message, Settings, check_folder_name, open};
+use super::{Entry, MAX_FILE_NAME_LEN, Message, Settings, check_folder_name, open, open_message};
 use crate::bytes::BytesExt;
 use crate::error::{Error, Reporter, Result};
 use crate::folder::Entered;
@@ -100,7 +100,7 @@ impl ListReader {
             let name = line.trim_start_blank();
             let stem = name.strip_suffix(&self.settings.suffix[..]).unwrap_or(name);
             /* The name with the suffix first, then without it. */
-            if let Some(file) = open(name).or_else(|| open(stem)) {
+            if let Some(file) = open_message(name).or_else(|| open_message(stem)) {
                 return Ok(Some(Message { file, name: stem.to_vec(), folder: self.folder.clone() }));
             }
         }
