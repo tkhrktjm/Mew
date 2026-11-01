@@ -124,7 +124,6 @@ difftest/README.ja.md を参照。
   読むので、`1-x` は 1 以降を意味する。エラーは "invalid range" または
   "invalid number" である (`mewl` では "negative number" または
   "number out of range")。
-- メッセージは通常のファイルでなければならない。
 - `:` のない `-d key` の値が `:` で始まることはない。
 - パターン中の文字列はいくら長くてもよい。`mewl` は文字列を `BUFSIZ`
   バイト (glibc では 8192) のバッファに置き、8192 バイト以上では失敗する

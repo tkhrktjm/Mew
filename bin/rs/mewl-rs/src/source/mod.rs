@@ -13,7 +13,7 @@ mod list;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::OpenOptionsExt;
 
 pub use folders::FolderScanner;
 pub use list::ListReader;
@@ -64,34 +64,10 @@ impl Iterator for Source {
     }
 }
 
-/// Tells whether a message is a regular file (unless `-n`).
-pub struct RegularFileCheck {
-    flavor: Flavor,
-    /// mewl keeps the previous mode if `fstat()` fails.
-    mode: u32,
-}
-
-impl RegularFileCheck {
-    /// The `S_IFREG` bit of `st_mode`.
-    const S_IFREG: u32 = 0o100000;
-
-    pub fn new(flavor: Flavor) -> Self {
-        RegularFileCheck { flavor, mode: 0 }
-    }
-
-    /// mewl tests the `S_IFREG` bit, not the file type, so a socket
-    /// passes, for instance. `mewl-rs` tests the file type, and a file
-    /// whose type is unknown is not regular.
-    pub fn is_regular(&mut self, file: &File) -> bool {
-        let meta = file.metadata();
-        if self.flavor.fixes_bugs() {
-            return meta.is_ok_and(|m| m.file_type().is_file());
-        }
-        if let Ok(meta) = meta {
-            self.mode = meta.mode();
-        }
-        self.mode & Self::S_IFREG != 0
-    }
+/// Whether a message is a regular file, checked unless `-n`. A file
+/// whose type is unknown is not, as in mewl.
+pub fn is_regular(file: &File) -> bool {
+    file.metadata().is_ok_and(|m| m.file_type().is_file())
 }
 
 fn open(name: &[u8]) -> Option<File> {
