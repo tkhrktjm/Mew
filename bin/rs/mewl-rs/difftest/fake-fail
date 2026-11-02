@@ -1,0 +1,10 @@
+#!/bin/sh
+# A command for "mewl -e fake-fail -m how" which fails: prints names of
+# message files to stdout, and then exits with the status "how", or is
+# killed by the signal of "kill".
+echo 1
+echo 2
+case "$1" in
+kill) kill -9 $$ ;;
+*) exit "$1" ;;
+esac
