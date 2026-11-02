@@ -244,6 +244,39 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 | 29. take the byte order of UTF-16 from its BOM in mewl-rs | `./difftest.py rs/28 rs/29 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 7945 run, 0 mismatches |
 | | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 7945 run, 1 mismatch: BOM のない `utf-16`、`UTF-16`、`utf16` に対する `-d subject: +charset`、ビッグエンディアンになった |
 
+手順 32 から 38 は、2dd6a0e の main と、まだマージされていない b792ffa の
+PR #322 に従う (C-b792ffa は C-2dd6a0e にそれを加えたもの)。その前の
+rs/31 は、C-2dd6a0e と 408 ケースで異なる: 一つの式になっていない
+パターン 296、空のヘッダのメッセージに対する `head` の pick 38、`-P` の
+実行 35、NUL を含むリスト 16、コマンドが失敗する `-e` の実行 7、`-h`、
+既知の 15。
+
+| 32. refuse patterns not of one expression as mewl of 2dd6a0e does | `./difftest.py C-2dd6a0e rs/32 --name-b mewl-rs-compat` | 8005 run, 112 mismatches |
+| | `./difftest.py rs/31 rs/32 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8005 run, 296 mismatches: 一つの式になっていないパターン、"broken pattern." になった |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8005 run, 0 mismatches |
+
+| 33. keep the line after one with NUL as mewl of 2dd6a0e does | `./difftest.py C-2dd6a0e rs/33 --name-b mewl-rs-compat` | 8005 run, 96 mismatches |
+| | `./difftest.py rs/32 rs/33 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8005 run, 16 mismatches、NUL を含む `-i` のリスト |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8005 run, 0 mismatches |
+
+| 34. wait for the command of -e as mewl of 2dd6a0e does | `./difftest.py C-2dd6a0e rs/34 --name-b mewl-rs-compat` | 8005 run, 89 mismatches |
+| | `./difftest.py rs/33 rs/34 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 8005 run, 7 mismatches、コマンドが失敗する `-e` の実行の終了ステータス |
+
+| 35. stop the key head at an empty header as mewl of 2dd6a0e does | `./difftest.py C-2dd6a0e rs/35 --name-b mewl-rs-compat` | 8005 run, 51 mismatches |
+| | `./difftest.py rs/34 rs/35 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8005 run, 38 mismatches、+inbox/10 と +rand/1 に対する `head` の pick |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8005 run, 8 mismatches、改行を含む `head` の pick |
+
+| 36. show the help of mewl of 2dd6a0e in mewl-rs-compat | `./difftest.py C-2dd6a0e rs/36 --name-b mewl-rs-compat` | 8005 run, 51 mismatches: `-P` の実行 35、`-h`、既知の 15 |
+| | `./difftest.py rs/35 rs/36 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8005 run, 1 mismatch、`-h` |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8005 run, 0 mismatches |
+
+| 37. refuse -: as an unknown option as mewl of PR #322 does | `./difftest.py C-b792ffa rs/37 --name-b mewl-rs-compat` | 8005 run, 51 mismatches (rs/36 では 52) |
+| | `./difftest.py rs/36 rs/37 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8005 run, 1 mismatch、`-:` |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8005 run, 0 mismatches |
+
+| 38. take a pattern in hexadecimal by -P as mewl of 2dd6a0e does | `./difftest.py C-b792ffa rs/38 --name-b mewl-rs-compat` | 8005 run, 15 mismatches、既知の 15 |
+| | `./difftest.py rs/37 rs/38 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 8005 run, 36 mismatches: `-P` の実行 35 と `-h` |
+
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
 `+charset` を加えて作り直して 7572 が 7585 に、手順 17 で `+charset` に
@@ -251,13 +284,15 @@ mewl-rs である)。コマンドはこのディレクトリで実行する。
 加えて 7901 に、手順 19 でそれに 0x213D を加えて 7903 になる。手順 16 から
 18 の行は、それぞれの手順のコーパスによる。手順 24 から 29 の行は、
 `INT_MAX` と `UINT_MAX` 前後の番号、`BUFSIZ` 前後の文字列、FIFO を
-加えた手順 28 のコーパス (7945) による。
+加えた手順 28 のコーパス (7945) による。手順 32 から 38 の行は、`-P`、
+コマンドが失敗する `-e`、改行を含む `head` を加えた手順 39 のケース
+(8005) による。
 
 差分テストで見る限り、mewl-rs-compat が変わるのは、main に従う手順 4、
-8、14、24 から 26、UTF-7 と ISO-2022-JP を復号する手順 10 と 15、charset
-名を知り、1 バイト charset と Shift_JIS と EUC-JP を glibc と同じように
-変換する手順 16 から 18 だけである。それ以外の手順では前と同じで、
-たとえば、ともに mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は
-0 である。
+8、14、24 から 26、32 から 38 (手順 37 は PR #322 に従う)、UTF-7 と
+ISO-2022-JP を復号する手順 10 と 15、charset 名を知り、1 バイト charset
+と Shift_JIS と EUC-JP を glibc と同じように変換する手順 16 から 18
+だけである。それ以外の手順では前と同じで、たとえば、ともに
+mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は 0 である。
 手順 27 も main に従うが、それはソケットと `fstat()` の失敗についてで、
 コーパスにはこれらがない。
