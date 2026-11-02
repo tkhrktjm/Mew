@@ -170,7 +170,6 @@ impl Options {
             navigator: Navigator::new(self.mail_home.clone()),
             suffix: self.suffix.clone(),
             is_default,
-            flavor: self.flavor,
         }
     }
 }
