@@ -120,13 +120,14 @@ It also fixes some bugs of `mewl`:
   `mewl` overwrites its last byte with a newline, so `last` comes out
   as `las`. Likewise, the last line of the body beginning with `.` is
   escaped as the other lines are.
-- A pick pattern is parsed strictly. Words not quoted after a value
-  are a part of the value, so `subject=foo bar`, which Mew passes for
-  `subject='foo bar'`, finds `foo bar` while `mewl` finds `foo`. A
-  pattern which is not one expression, such as `a=b c=d`, `(a=b c)`,
-  or `abc`, is an error ("broken pattern."), while `mewl` silently
-  evaluates its first part. A word followed by `=` is the key of
-  another comparison, not a part of the value.
+- Words not quoted after a value in a pick pattern are a part of the
+  value, so `subject=foo bar`, which Mew passes for
+  `subject='foo bar'`, finds `foo bar`, while `mewl` refuses it as a
+  pattern which is not one expression ("broken pattern."). A word
+  followed by `=` is the key of another comparison, not a part of the
+  value, so `a=b c=d` is refused as well. What is in parentheses has
+  to be one expression too: `mewl` refuses `(a=b c=d)`, but lets
+  `(a=b c=d) | e=f` go as `a=b | e=f`.
 - A message beginning with an empty line has an empty header. `mewl`
   takes its body for the header.
 - A line with NUL in the list of `-i` does not hide the next line.

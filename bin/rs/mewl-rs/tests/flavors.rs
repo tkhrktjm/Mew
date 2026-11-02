@@ -223,31 +223,28 @@ fn last_line_kept() {
 #[test]
 fn pattern_values_with_blanks() {
     let f = Fixture::new("blanks");
-    /* Mew passes subject=plain English for subject='plain English'. */
+    /* Mew passes subject=plain English for subject='plain English',
+    which mewl refuses. */
     assert_eq!(f.run("mewl-rs", &["-p", "subject=plain English", "+inbox"]), "3\n");
     assert_eq!(f.run("mewl-rs", &["-p", "subject=plain Japanese", "+inbox"]), "");
-    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject=plain Japanese", "+inbox"]), "3\n");
+    let mail = f.dir.join("Mail");
+    assert_eq!(
+        f.run_raw("mewl-rs-compat", &["-b", mail.to_str().unwrap(), "-p", "subject=plain English", "+inbox"]),
+        (false, String::new(), "mewl-rs-compat: broken pattern.\n".to_string())
+    );
 }
 
 #[test]
 fn broken_patterns_refused() {
     let f = Fixture::new("broken");
-    for (prog, pattern, expected) in [
-        ("mewl-rs", "subject=plain from=zzz", Some("mewl-rs: broken pattern.\n")),
-        ("mewl-rs", "(subject=plain from=zzz)", Some("mewl-rs: broken pattern.\n")),
-        ("mewl-rs", "plain", Some("mewl-rs: broken pattern.\n")),
-        ("mewl-rs-compat", "subject=plain from=zzz", None),
-    ] {
-        let out = output(
-            Command::new(f.dir.join("link").join(prog))
-                .args(["-b", f.dir.join("Mail").to_str().unwrap(), "-p", pattern, "+inbox"]),
-        );
-        match expected {
-            Some(message) => {
-                assert_eq!(String::from_utf8_lossy(&out.stderr), message);
-                assert!(!out.status.success());
-            }
-            None => assert_eq!((String::from_utf8_lossy(&out.stdout).as_ref(), out.status.success()), ("3\n", true)),
+    let mail = f.dir.join("Mail");
+    for prog in ["mewl-rs", "mewl-rs-compat"] {
+        for pattern in ["subject=plain from=zzz", "(subject=plain from=zzz)", "plain"] {
+            assert_eq!(
+                f.run_raw(prog, &["-b", mail.to_str().unwrap(), "-p", pattern, "+inbox"]),
+                (false, String::new(), format!("{prog}: broken pattern.\n")),
+                "{pattern}"
+            );
         }
     }
 }

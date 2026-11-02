@@ -41,7 +41,7 @@ struct Node {
 
 struct Parser {
     nodes: Vec<Node>,
-    /// Refuse what mewl takes silently (see [`parse`]).
+    /// Check every expression in parentheses (see [`parse`]).
     strict: bool,
 }
 
@@ -50,10 +50,10 @@ struct Parser {
 /// - Words not quoted after a value are a part of the value, with the
 ///   blanks between them as they are, unless a word is the key of a
 ///   comparison. Mew passes `subject=foo bar` for `subject='foo bar'`,
-///   which mewl takes as `subject=foo`.
-/// - A pattern which is not one expression, such as `a=b c=d` or
-///   `(a=b c)`, is an error, of which mewl evaluates the first part
-///   only.
+///   which mewl refuses as it takes `bar` for another expression.
+/// - What is in parentheses has to be one expression too, as the
+///   whole has to be either way: mewl lets `(a=b c=d) | e=f` go as
+///   `a=b | e=f`, while it refuses `(a=b c=d)`.
 pub fn parse(pattern: &[u8], strict: bool) -> Result<Expr> {
     let mut tokens = Lexer::new(pattern, strict).collect::<Result<Vec<_>>>()?;
     if strict {
@@ -74,6 +74,7 @@ pub fn parse(pattern: &[u8], strict: bool) -> Result<Expr> {
 
     parser.bind_comparisons(top)?;
     let top = parser.expression(top)?;
+    parser.check_one(top)?;
     Ok(parser.to_expr(Some(top)))
 }
 
@@ -189,10 +190,18 @@ impl Parser {
         let top = self.negations(top)?;
         let top = self.binary(top, Kind::And)?;
         let top = self.binary(top, Kind::Or)?;
-        if self.strict && (self.nodes[top].kind != Kind::Exp || self.nodes[top].next.is_some()) {
-            return Err(PatternError::Broken);
+        if self.strict {
+            self.check_one(top)?;
         }
         Ok(top)
+    }
+
+    /// Whether `top` is one expression, without anything after it.
+    fn check_one(&self, top: usize) -> Result<()> {
+        if self.nodes[top].kind != Kind::Exp || self.nodes[top].next.is_some() {
+            return Err(PatternError::Broken);
+        }
+        Ok(())
     }
 
     /*

@@ -45,8 +45,7 @@ pub struct Lexer<'a> {
     pos: usize,
     /// The token just read ended at a blank, which is consumed.
     blank_ended: bool,
-    /// Without the bugs of mewl in reading (see the comparisons in
-    /// [`Lexer::read_token`]) and its limit (see [`Lexer::push`]).
+    /// Without the limit of mewl (see [`Lexer::push`]).
     strict: bool,
 }
 
@@ -136,8 +135,8 @@ impl<'a> Lexer<'a> {
                 b'=' if kind == Kind::Cmp(Cmp::Eq) => kind = Kind::Cmp(Cmp::EqCase),
                 b'=' if kind == Kind::Not => match self.getc() {
                     Some(b'=') => kind = Kind::Cmp(Cmp::NeCase),
-                    /* mewl steps back even at the end. */
-                    None if self.strict => kind = Kind::Cmp(Cmp::Ne),
+                    /* Nothing is read at the end. */
+                    None => kind = Kind::Cmp(Cmp::Ne),
                     _ => {
                         kind = Kind::Cmp(Cmp::Ne);
                         self.ungetc()?;
@@ -220,9 +219,9 @@ mod tests {
         let ff = [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Eq), Token::Str(b"\xffb".to_vec())];
         assert_eq!(strict(b"a=\xffb"), ff);
         assert_eq!(tokens(b"a=\xffb"), ff);
-        /* "!=" at the end. */
+        /* "!=" at the end, not stepping back */
         assert_eq!(strict(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne)]);
-        assert_eq!(tokens(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne), Token::Cmp(Cmp::Eq)]);
+        assert_eq!(tokens(b"a!="), [Token::Str(b"a".to_vec()), Token::Cmp(Cmp::Ne)]);
     }
 
     #[test]

@@ -30,7 +30,7 @@ pub enum PatternError {
     TooLong,
     /// Found only when evaluated.
     BrokenTree,
-    /// Not one expression, in the strict syntax.
+    /// Not one expression.
     Broken,
 }
 
@@ -172,8 +172,11 @@ mod tests {
         assert_eq!(eval_strict(b"(a=abc c=zzz)"), Err(PatternError::Broken));
         assert_eq!(eval_strict(b"abc"), Err(PatternError::Broken));
         assert_eq!(eval_strict(b"a=abc !def"), Err(PatternError::BrokenNot));
-        /* mewl evaluates the first part only. */
-        assert_eq!(eval(b"abc=a abc=z"), Ok(true));
+        /* in parentheses followed by something as well */
+        assert_eq!(eval_strict(b"(a=abc c=zzz) | a=def"), Err(PatternError::Broken));
+        assert_eq!(eval_strict(b"a=zzz | (abc)"), Err(PatternError::Broken));
+        /* mewl takes "abc" for another expression. */
+        assert_eq!(eval(b"subject=abc def"), Err(PatternError::Broken));
     }
 
     #[test]
@@ -185,8 +188,12 @@ mod tests {
         assert_eq!(eval(b"()"), Err(PatternError::EmptyParentheses));
         assert_eq!(eval(b"!a"), Err(PatternError::BrokenNot));
         assert_eq!(eval(b"a=b &"), Err(PatternError::BrokenAndOr));
-        assert_eq!(eval(b"abc"), Err(PatternError::BrokenTree));
-        /* Only the first one is evaluated. */
-        assert_eq!(eval(b"abc=a abc"), Ok(true));
+        /* not one expression */
+        assert_eq!(eval(b"abc"), Err(PatternError::Broken));
+        assert_eq!(eval(b"abc=a abc=z"), Err(PatternError::Broken));
+        assert_eq!(eval(b"(abc=a abc)"), Err(PatternError::Broken));
+        /* but only the whole: the stray "abc" goes. */
+        assert_eq!(eval(b"x=a | (abc)"), Err(PatternError::BrokenAndOr));
+        assert_eq!(eval(b"(abc=a abc) | abc=z"), Ok(true));
     }
 }
