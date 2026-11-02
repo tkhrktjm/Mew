@@ -438,8 +438,9 @@ fn wait_for_reader() {
 #[test]
 fn options() {
     let f = Fixture::new("options");
-    assert_eq!(f.run_raw("mewl-rs", &["-:"]), (false, String::new(), "mewl-rs: unknown option '-:'.\n".to_string()));
-    assert_eq!(f.run_raw("mewl-rs-compat", &["-:"]).2, "Usage: mewl-rs-compat [options] [folder [range]]\n");
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run_raw(name, &["-:"]), (false, String::new(), format!("{name}: unknown option '-:'.\n")));
+    }
     assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n -x  <suffix>  Use this suffix.\n"));
     assert!(f.run_raw("mewl-rs-compat", &["-h"]).2.contains("\n -x  <suffix>  Use this suffix.\n"));
     assert!(f.run_raw("mewl-rs", &["-h"]).2.contains("\n<pattern> = 'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>' | '(<pattern>)' \n"));

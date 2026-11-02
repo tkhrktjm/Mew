@@ -184,10 +184,9 @@ pub fn parse(argv: &[Vec<u8>], flavor: Flavor) -> Result<Command> {
         if !rest.is_empty() {
             return Err(Error::UnknownLongOption(arg.clone()));
         }
-        /* mewl takes ':' in OPTSTRING for an option, and then shows
-        the usage. */
+        /* ':' in OPTSTRING marks an argument, not an option. */
         let pos = OPTSTRING.iter().position(|&o| o == c);
-        let Some(pos) = pos.filter(|_| !(c == b':' && flavor.fixes_bugs())) else {
+        let Some(pos) = pos.filter(|_| c != b':') else {
             return Err(Error::UnknownOption(c));
         };
         let optarg = if OPTSTRING.get(pos + 1) == Some(&b':') {
@@ -222,8 +221,7 @@ pub fn parse(argv: &[Vec<u8>], flavor: Flavor) -> Result<Command> {
             b'v' => return Ok(Command::Version),
             b'w' => opts.wait = true,
             b'x' => opts.suffix = optarg,
-            /* ':' in OPTSTRING */
-            _ => return Err(Error::Usage),
+            _ => unreachable!("an option not in OPTSTRING"),
         }
     }
 
