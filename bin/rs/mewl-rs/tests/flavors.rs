@@ -349,6 +349,13 @@ fn sources() {
     f.write("o/3", b"Subject: three\n\nbody3\n");
     f.write("p/1", b"Subject: another one\n\n");
     let mail = f.dir.join("Mail");
+    let script = |name: &str, body: &str| {
+        let path = f.dir.join(name);
+        fs::write(&path, format!("echo 1\n{body}\n")).unwrap();
+        path
+    };
+    let exit3 = script("exit3", "exit 3");
+    let killed = script("killed", "kill -9 $$");
     for name in ["mewl-rs", "mewl-rs-compat"] {
         /* folders of -s in order */
         assert_eq!(
@@ -370,10 +377,19 @@ fn sources() {
             "3: three\n1: another one\n",
             "{name}"
         );
+        /* The command is waited for at the end, and its failure makes
+        the exit status failure. */
         assert_eq!(
             f.run_raw(name, &["-b", mail.to_str().unwrap(), "-e", "/nonexistent", "+o"]),
-            (true, String::new(), format!("{name}: '/nonexistent' command not found.\n")),
+            (false, String::new(), format!("{name}: '/nonexistent' command not found.\n")),
         );
+        for (script, how) in [(&exit3, "exited with 3"), (&killed, "killed")] {
+            assert_eq!(
+                f.run_raw(name, &["-b", mail.to_str().unwrap(), "-d", "subject:", "-e", "sh", "-m", script.to_str().unwrap(), "+o"]),
+                (false, "1: one\n".to_string(), String::new()),
+                "{name} {how}"
+            );
+        }
     }
 }
 

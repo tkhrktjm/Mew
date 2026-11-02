@@ -62,6 +62,16 @@ impl Iterator for Source {
     }
 }
 
+impl Source {
+    /// See [`ListReader::command_failed`].
+    pub fn command_failed(&mut self) -> bool {
+        match self {
+            Source::Folders(_) => false,
+            Source::List(s) => s.command_failed(),
+        }
+    }
+}
+
 /// Whether a message is a regular file, checked unless `-n`. A file
 /// whose type is unknown is not, as in mewl.
 pub fn is_regular(file: &File) -> bool {
