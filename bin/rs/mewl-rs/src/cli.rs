@@ -21,8 +21,9 @@ const OPTSTRING: &[u8] = b"ab:c:d:e:f:hi:l:m:np:s:vwx:";
 
 const MAX_FOLDER: usize = 16;
 
-/* Some lines end with a space as mewl does. mewl lacks "<suffix>"
-in the line of -x and "==" and "!==" in <pattern> (see help()). */
+/* Some lines end with a space as mewl does. mewl lacks "==" and "!=="
+in <pattern>, and says that a value with a space must be quoted, which
+mewl-rs does not need (see help()). */
 const HELP: &str = " -a            Print all necessary fields when picking.
  -b  <mdir>    Mail home.
  -c  <bodylen> Max body length to dump.
@@ -247,10 +248,15 @@ pub fn help(progname: &[u8], flavor: Flavor) {
     usage(progname);
     let help = match flavor.fixes_bugs() {
         true => HELP.to_string(),
-        false => HELP.replace(" -x  <suffix>  ", " -x            ").replace(
-            "'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>'",
-            "'key=val' | 'key!=val' | '!<pattern>'",
-        ),
+        false => HELP
+            .replace(
+                "'key=val' | 'key!=val' | 'key==val' | 'key!==val'\n          | '!<pattern>'",
+                "'key=val' | 'key!=val' | '!<pattern>'",
+            )
+            .replace(
+                "| '<pattern>|<pattern>' \n",
+                "| '<pattern>|<pattern>' \n          A value with a space must be double-quoted, e.g. key=\"a b\".\n",
+            ),
     };
     let _ = io::stderr().write_all(help.as_bytes());
 }
