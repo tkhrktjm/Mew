@@ -3,10 +3,11 @@
 //! the name it is invoked by, through a link for instance.
 
 use std::fs;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -337,6 +338,81 @@ fn fifo() {
     for name in ["mewl-rs", "mewl-rs-compat"] {
         assert_eq!(f.run(name, &["-d", "subject:", "+f"]), "1: one\n", "{name}");
         assert_eq!(f.run(name, &["-n", "-d", "subject:", "+f"]), "1: one\n2: \n", "{name}");
+    }
+}
+
+#[test]
+fn sources() {
+    let f = Fixture::new("sources");
+    f.write("o/1", b"Subject: one\nFrom: a@example.com\n\nbody1\n");
+    f.write("o/2", b"Subject: two\n\nbody2\n");
+    f.write("o/3", b"Subject: three\n\nbody3\n");
+    f.write("p/1", b"Subject: another one\n\n");
+    let mail = f.dir.join("Mail");
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        /* folders of -s in order */
+        assert_eq!(
+            f.run(name, &["-d", "subject:", "-s", "+o 2-3", "-s", "+p"]),
+            "2: two\n3: three\n1: another one\n",
+            "{name}"
+        );
+        assert_eq!(f.run(name, &["-p", "subject=one", "-s", "+o", "-s", "+p"]), "1\n1\n", "{name}");
+        /* -a: the folder, the file name, and the message picked */
+        assert_eq!(
+            f.run(name, &["-a", "-p", "subject=two", "-s", "+o", "-s", "+p"]),
+            "Folder: +o\nFilename: 2\nSubject: two\n\nbody2\n.\n",
+            "{name}"
+        );
+        /* -e runs the command with the arguments of -m and the folder
+        in the folder, and reads the names it prints, or CD: */
+        assert_eq!(
+            f.run(name, &["-d", "subject:", "-e", "printf", "-m", "%s\\n 3 CD:+p 1", "+o"]),
+            "3: three\n1: another one\n",
+            "{name}"
+        );
+        assert_eq!(
+            f.run_raw(name, &["-b", mail.to_str().unwrap(), "-e", "/nonexistent", "+o"]),
+            (true, String::new(), format!("{name}: '/nonexistent' command not found.\n")),
+        );
+    }
+}
+
+#[test]
+fn wait_for_reader() {
+    let f = Fixture::new("wait");
+    for i in 1..=3 {
+        f.write(&format!("w/{i}"), format!("Subject: {i}\n\nbody{i}\n").as_bytes());
+    }
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        let mut child = Command::new(f.dir.join("link").join(name))
+            .args(["-b", f.dir.join("Mail").to_str().unwrap(), "-w", "-f", "subject:", "+w"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take().unwrap();
+        let stdout = BufReader::new(child.stdout.take().unwrap());
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || stdout.lines().try_for_each(|line| tx.send(line.unwrap())));
+        let line = || rx.recv_timeout(Duration::from_secs(10)).expect(name);
+        let record = || -> String {
+            let mut lines = vec![line()];
+            while lines.last().unwrap() != "." {
+                lines.push(line());
+            }
+            lines.join("\n")
+        };
+        let scanned = |i| format!("Folder: +w\nFilename: {i}\nSubject: {i}\n\nbody{i}\n.");
+        assert_eq!(line(), "NumOfMsg: 3");
+        /* A record is flushed, and then a byte is awaited. */
+        assert_eq!(record(), scanned(1));
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "{name}");
+        stdin.write_all(b"\n").unwrap();
+        assert_eq!(record(), scanned(2));
+        /* no more after the end of stdin */
+        drop(stdin);
+        assert_eq!(record(), scanned(3));
+        assert!(child.wait().unwrap().success(), "{name}");
     }
 }
 
