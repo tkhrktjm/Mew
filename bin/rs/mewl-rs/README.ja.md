@@ -127,7 +127,6 @@ difftest/README.ja.md を参照。
   は `a=b | e=f` として通す。
 - 空行で始まるメッセージのヘッダは空である。`mewl` は本文をヘッダと
   みなす。
-- `-i` のリスト中の NUL を含む行が、次の行を隠すことはない。
 - 範囲や `-c`、`-l` の数は 10 進数でなければならない。`mewl` はゴミを 0 と
   読むので、`1-x` は 1 以降を意味する。エラーは "invalid range" または
   "invalid number" である (`mewl` では "negative number" または

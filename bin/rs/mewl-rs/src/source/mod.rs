@@ -19,7 +19,6 @@ pub use folders::FolderScanner;
 pub use list::ListReader;
 
 use crate::error::{Error, Result};
-use crate::flavor::Flavor;
 use crate::folder::Navigator;
 
 const MAX_FILE_NAME_LEN: usize = libc::PATH_MAX as usize;
@@ -45,7 +44,6 @@ pub struct Settings {
     pub suffix: Vec<u8>,
     /// No folder is specified, so the folder is the default one.
     pub is_default: bool,
-    pub flavor: Flavor,
 }
 
 pub enum Source {

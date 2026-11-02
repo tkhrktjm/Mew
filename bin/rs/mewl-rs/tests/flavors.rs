@@ -282,7 +282,10 @@ fn nul_in_a_list() {
     let list = f.dir.join("list");
     let args = ["-d", "subject:", "-i", list.to_str().unwrap(), "+inbox"];
     assert_eq!(f.run("mewl-rs", &args), "1: 日本語の件名\n3: plain English\n1: 日本語の件名\n");
-    assert_eq!(f.run("mewl-rs-compat", &args), "1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n");
+    assert_eq!(
+        f.run("mewl-rs-compat", &args),
+        "1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n3: plain English\n1: =?UTF-8?B?5pel5pys6Kqe44Gu5Lu25ZCN?=\n"
+    );
 }
 
 #[test]
