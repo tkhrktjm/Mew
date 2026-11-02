@@ -268,8 +268,11 @@ fn no_data_left_by_the_previous_message() {
 fn empty_header() {
     let f = Fixture::new("empty");
     f.write("b/1", b"\nSubject: in body\n");
-    assert_eq!(f.run("mewl-rs", &["-p", "head=\"in body\"", "+b"]), "");
-    assert_eq!(f.run("mewl-rs-compat", &["-p", "head=\"in body\"", "+b"]), "1\n");
+    /* The header of head is the empty line. */
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run(name, &["-p", "head=\"in body\"", "+b"]), "", "{name}");
+        assert_eq!(f.run(name, &["-p", "head=\"\n\"", "+b"]), "1\n", "{name}");
+    }
     /* No field, and the body. mewl takes the body for the header. */
     assert!(f.run("mewl-rs", &["+b"]).contains("Filename: 1\n\nSubject: in body\n.\n"));
     assert!(f.run("mewl-rs-compat", &["+b"]).contains("Filename: 1\nSubject: in body\n\n.\n"));
