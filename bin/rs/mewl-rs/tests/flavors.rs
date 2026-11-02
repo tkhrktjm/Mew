@@ -436,6 +436,30 @@ fn wait_for_reader() {
 }
 
 #[test]
+fn hex_pattern() {
+    let f = Fixture::new("hex");
+    let mail = f.dir.join("Mail");
+    let hex = |p: &str| p.bytes().map(|c| format!("{c:02x}")).collect::<String>();
+    for name in ["mewl-rs", "mewl-rs-compat"] {
+        /* "subject=plain", and "from=日本" which Mew passes so on Windows */
+        assert_eq!(f.run(name, &["-P", &hex("subject=plain"), "+inbox"]), "3\n", "{name}");
+        assert_eq!(
+            f.run(name, &["-P", &hex("subject=日本").to_uppercase(), "+inbox"]),
+            f.run(name, &["-p", "subject=日本", "+inbox"]),
+            "{name}"
+        );
+        /* the last of -p and -P, ending at NUL */
+        assert_eq!(f.run(name, &["-p", "subject=x", "-P", &hex("subject=plain\0x"), "+inbox"]), "3\n", "{name}");
+        for (arg, error) in [("616", "odd length of hex pattern."), ("6g", "invalid hex pattern.")] {
+            assert_eq!(
+                f.run_raw(name, &["-b", mail.to_str().unwrap(), "-P", arg, "+inbox"]),
+                (false, String::new(), format!("{name}: {error}\n"))
+            );
+        }
+    }
+}
+
+#[test]
 fn options() {
     let f = Fixture::new("options");
     for name in ["mewl-rs", "mewl-rs-compat"] {

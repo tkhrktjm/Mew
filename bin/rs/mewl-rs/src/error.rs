@@ -39,6 +39,10 @@ pub enum Error {
     DefaultFolderMissing,
     /// Not fatal: mewl goes on without the command (`-e`).
     CommandNotFound(Vec<u8>),
+    /// The argument of `-P` of an odd length.
+    OddHexPattern,
+    /// The argument of `-P` with a character not a hexadecimal digit.
+    InvalidHexPattern,
     Pattern(PatternError),
 }
 
@@ -69,6 +73,8 @@ impl Error {
             Error::FolderNameTooLong => b"folder name is too long.".to_vec(),
             Error::DefaultFolderMissing => b"default folder is not exist.".to_vec(),
             Error::CommandNotFound(command) => quoted("'", command, "' command not found."),
+            Error::OddHexPattern => b"odd length of hex pattern.".to_vec(),
+            Error::InvalidHexPattern => b"invalid hex pattern.".to_vec(),
             Error::Pattern(e) => e.message().as_bytes().to_vec(),
         }
     }
