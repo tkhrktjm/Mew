@@ -20,6 +20,7 @@ mewl-rs には独自のバージョンがあるので、`-v` が表示するバ�
 - `classify.py`: `difftest.py --dump` が書き出した不一致を、それを
   説明するはずの変更ごとに分類する。
 - `fake-inc`: `mewl -e` のための incm の代わり。
+- `fake-fail`: `mewl -e` のための、失敗するコマンド。
 - `mewcheck.py` と `mewcheck.el`: mewl-rs の復号と Mew の表示を比べる
   (後述)。
 
@@ -30,9 +31,14 @@ mewl-rs には独自のバージョンがあるので、`-v` が表示するバ�
 これを使う):
 
 ```
-% mkdir /tmp/c && git archive bc8d869 | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive b792ffa | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
+
+b792ffa は、2dd6a0e の main に、まだマージされていない PR #322 (`-:` を
+未知のオプションとする) を加えたもので、mewl-rs-compat はこれに従う。
+`git fetch https://github.com/kazu-yamamoto/Mew pull/322/head` で
+取得できる。
 
 mewl-rs:
 
@@ -55,7 +61,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 
 | スイート | ケース数 | 内容 |
 |---|---:|---|
-| `base` | 4038 | オプション、フォルダと範囲、`INT_MAX` と `UINT_MAX` 前後の番号、scan、sort (`-d`)、`-i`、`-e`、`-w`、FIFO、エラー、`BUFSIZ` 前後の長さのパターンの文字列、ランダムに作った 3000 個の pick のパターン |
+| `base` | 4098 | オプション、フォルダと範囲、`INT_MAX` と `UINT_MAX` 前後の番号、scan、sort (`-d`)、`-i`、`-e` とその失敗、`-w`、FIFO、エラー、`BUFSIZ` 前後の長さのパターンの文字列、16 進のパターン (`-P`)、ランダムに作った 3000 個の pick のパターン |
 | `mime` | 1227 | RFC 2047 の encoded-word に対する pick と sort |
 | `uni` | 1626 | Unicode の大文字小文字の畳み込みと NFC による pick |
 | `utf7` | 471 | UTF-7 と UTF-7-IMAP の、正しい、および不正な encoded-word に対する pick と sort |
@@ -78,7 +84,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 ## 期待される結果
 
 iconv と utf8proc 2.10 付きで (`--enable-utf8proc-char-fold` なしで)
-ビルドした bc8d869 の C 版 mewl に対して、mewl-rs-compat は 7945 ケース
+ビルドした b792ffa の C 版 mewl に対して、mewl-rs-compat は 8005 ケース
 中 15 ケースで異なる。どれも `charset` スイートにあり、../README.ja.md に
 書いた既知の違いによる。glibc は知っているが mewl-rs は知らない charset
 (UTF-32、UCS-4、JOHAB、ISO-2022-KR、ISO-2022-CN、EBCDIC) の
@@ -87,7 +93,7 @@ encoded-word と、`mewl` が最後の文字を失う windows-1258 である。
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7945 run, 15 mismatches
+TOTAL: 8005 run, 15 mismatches
 ```
 
 30 秒 (FIFO では 5 秒) で終わらない実行はタイムアウトとみなす。

@@ -18,8 +18,9 @@ its own.
 Suites (--suite, all but wellformed by default):
 
   base       options, folders and ranges, numbers around INT_MAX and
-             UINT_MAX, scan, sort (-d), -i, -e, -w, a FIFO, errors,
-             strings of patterns around BUFSIZ, and 3000 fuzzed pick
+             UINT_MAX, scan, sort (-d), -i, -e and its failures, -w,
+             a FIFO, errors, strings of patterns around BUFSIZ,
+             patterns in hexadecimal (-P), and 3000 fuzzed pick
              patterns
   mime       pick and sort on encoded-words (folder +mime)
   uni        pick with Unicode case folding and NFC (folder +uni)
@@ -202,8 +203,26 @@ def suite_base(r):
                   ["-p", "head=foo"]]:
             r.check(o + ["-e", "fake-inc"] + f, b"\n" * 100)
             r.check(o + ["-e", os.path.join(HERE, "fake-inc")] + f, b"\n" * 100)
+    # the command of -e failing: exiting with a status but 0, or killed
+    for how in ["0", "3", "kill"]:
+        for o in [[], ["-d", "subject:"], ["-p", "subject=e"]]:
+            r.check(o + ["-e", "fake-fail", "-m", how, "+inbox"])
     r.check(["-w", "+inbox"], b"\n\n")
     r.check(["-w", "+inbox"], b"")
+    # patterns in hexadecimal (-P), and where they end
+    hexes = [p.encode().hex() for p in ["subject=hello", "subject=日本語", "head=foo | from=bar", "(subject=e",
+                                        "subject=e\0x", "subject=e from=x", "a!="]]
+    hexes += ["7375626A6563743D454C4C4F", "", "6", "616", "6g", "g6", "+6", " 61", "-p"]
+    for h in hexes:
+        for f in [["+inbox"], ["+rand"]]:
+            r.check(["-P", h] + f)
+    r.check(["-p", "subject=x", "-P", "subject=e".encode().hex(), "+inbox"])
+    r.check(["-P", "subject=x".encode().hex(), "-p", "subject=e", "+inbox"])
+    r.check(["-P"])
+    # head with a newline, which an empty header has, and "!=" at the end
+    for p in ["head=\n", "head!=\n", 'head="\n"', "head==\n", "a!=", "subject!=", "a!", "a!=="]:
+        for f in [["+inbox"], ["+rand"]]:
+            r.check(["-p", p] + f)
     # numbers around INT_MAX and UINT_MAX, negative ones, and garbage
     for f in [["+big"], ["+big", "2147483648"], ["+big", "4294967295"], ["+big", "4294967296"],
               ["+big", "99999999999"], ["+big", "2-4294967295"], ["+big", "2-4294967296"], ["+big", "4294967296-"],

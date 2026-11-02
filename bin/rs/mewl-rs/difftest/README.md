@@ -20,6 +20,7 @@ Only Python 3 is needed besides the binaries.
 - `classify.py`: sorts the mismatches dumped by `difftest.py --dump`
   by the change that should explain them.
 - `fake-inc`: a stand-in for incm, for `mewl -e`.
+- `fake-fail`: a command which fails, for `mewl -e`.
 - `mewcheck.py` and `mewcheck.el`: compare what mewl-rs decodes with
   what Mew shows (see below).
 
@@ -29,9 +30,13 @@ The C mewl of a revision, with iconv and, if installed, utf8proc
 (libutf8proc-dev on Debian; the mewl of main uses it when found):
 
 ```
-% mkdir /tmp/c && git archive bc8d869 | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive b792ffa | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
+
+b792ffa is main of 2dd6a0e with PR #322 (`-:` as an unknown option),
+not merged yet, which mewl-rs-compat follows: fetch it by `git fetch
+https://github.com/kazu-yamamoto/Mew pull/322/head`.
 
 mewl-rs:
 
@@ -55,7 +60,7 @@ same as mewl.
 
 | suite | cases | what |
 |---|---:|---|
-| `base` | 4038 | options, folders and ranges, numbers around `INT_MAX` and `UINT_MAX`, scan, sort (`-d`), `-i`, `-e`, `-w`, a FIFO, errors, strings of patterns around `BUFSIZ`, and 3000 fuzzed pick patterns |
+| `base` | 4098 | options, folders and ranges, numbers around `INT_MAX` and `UINT_MAX`, scan, sort (`-d`), `-i`, `-e` and its failures, `-w`, a FIFO, errors, strings of patterns around `BUFSIZ`, patterns in hexadecimal (`-P`), and 3000 fuzzed pick patterns |
 | `mime` | 1227 | pick and sort on encoded-words of RFC 2047 |
 | `uni` | 1626 | pick with Unicode case folding and NFC |
 | `utf7` | 471 | pick and sort on encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid |
@@ -77,9 +82,9 @@ binary, to tell the effects of fixes apart:
 
 ## Expected results
 
-Against the C mewl of bc8d869 built with iconv and utf8proc 2.10
+Against the C mewl of b792ffa built with iconv and utf8proc 2.10
 (without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 15
-of the 7945 cases, all in the `charset` suite, for the known
+of the 8005 cases, all in the `charset` suite, for the known
 differences in ../README.md: on encoded-words in charsets that glibc
 knows but mewl-rs does not (UTF-32, UCS-4, JOHAB, ISO-2022-KR,
 ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
@@ -88,7 +93,7 @@ ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 7945 run, 15 mismatches
+TOTAL: 8005 run, 15 mismatches
 ```
 
 A run which does not end in 30 seconds, or in 5 for the FIFO, is
