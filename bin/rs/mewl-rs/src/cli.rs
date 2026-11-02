@@ -17,7 +17,7 @@ use crate::source::Settings;
 
 const VERSION: &str = concat!("version ", env!("CARGO_PKG_VERSION"));
 
-const OPTSTRING: &[u8] = b"ab:c:d:e:f:hi:l:m:np:s:vwx:";
+const OPTSTRING: &[u8] = b"ab:c:d:e:f:hi:l:m:np:P:s:vwx:";
 
 const MAX_FOLDER: usize = 16;
 
@@ -36,6 +36,7 @@ const HELP: &str = " -a            Print all necessary fields when picking.
  -l  <length>  Field max length to dump. (0 means no limit)
  -n            Don't use fstat().
  -p  <pattern> Pick pattern.
+ -P  <hex>     Pick pattern in hexadecimal.
  -s  <src>     Message source: '+folder range'.
  -w            Wait for stdio input to synchronize.
  -v            Display the version.
@@ -211,6 +212,7 @@ pub fn parse(argv: &[Vec<u8>], flavor: Flavor) -> Result<Command> {
             b'm' => opts.exec_args = Some(optarg),
             b'n' => opts.use_fstat = false,
             b'p' => opts.pattern = Some(optarg),
+            b'P' => opts.pattern = Some(unhex(&optarg)?),
             b's' => {
                 if opts.sources.len() >= MAX_FOLDER {
                     return Err(Error::TooManyFolders);
@@ -227,6 +229,18 @@ pub fn parse(argv: &[Vec<u8>], flavor: Flavor) -> Result<Command> {
 
     opts.operands = args.cloned().collect();
     Ok(Command::Run(Box::new(opts)))
+}
+
+/// The pattern of `-P`, the hexadecimal digits of its bytes, which Mew
+/// passes on Windows since Emacs there passes the arguments in the ANSI
+/// code page. It ends at NUL, as a C string in mewl.
+fn unhex(hex: &[u8]) -> Result<Vec<u8>> {
+    if !hex.len().is_multiple_of(2) {
+        return Err(Error::OddHexPattern);
+    }
+    let digit = |c: u8| char::from(c).to_digit(16).ok_or(Error::InvalidHexPattern);
+    let bytes = hex.chunks(2).map(|p| Ok((digit(p[0])? << 4 | digit(p[1])?) as u8)).collect::<Result<Vec<u8>>>()?;
+    Ok(bytes.split(|&c| c == 0).next().unwrap_or_default().to_vec())
 }
 
 /// `getprognm()`: the basename in lower case.
@@ -262,4 +276,21 @@ pub fn help(progname: &[u8], flavor: Flavor) {
 pub fn version(progname: &[u8]) {
     let line = [progname, b" ", VERSION.as_bytes(), b"\n"].concat();
     let _ = io::stderr().write_all(&line);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unhex;
+    use crate::error::Error;
+
+    #[test]
+    fn hex_pattern() {
+        assert_eq!(unhex(b"7375626a6563743de697a5"), Ok("subject=日".as_bytes().to_vec()));
+        assert_eq!(unhex(b"4A4b"), Ok(b"JK".to_vec()));
+        assert_eq!(unhex(b""), Ok(Vec::new()));
+        assert_eq!(unhex(b"610062"), Ok(b"a".to_vec()));
+        assert_eq!(unhex(b"616"), Err(Error::OddHexPattern));
+        assert_eq!(unhex(b"6g"), Err(Error::InvalidHexPattern));
+        assert_eq!(unhex(b"+6"), Err(Error::InvalidHexPattern));
+    }
 }
