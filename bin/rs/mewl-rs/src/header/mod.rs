@@ -88,7 +88,7 @@ impl Header {
     }
 
     /// Whether the header is empty, the message beginning with an
-    /// empty line. mewl takes the body for the header then.
+    /// empty line. mewl takes the body for the header then in scan.
     fn has_empty_header(&self) -> bool {
         self.flavor.fixes_bugs() && self.len > 0 && self.buf[0] == LF
     }
@@ -150,10 +150,11 @@ impl Header {
     }
 
     /// The position of the empty line ending the header, or the end of
-    /// the data.
+    /// the data. A message beginning with an empty line has a header
+    /// of the line, as in mewl.
     fn end_of_header(&self) -> usize {
-        if self.has_empty_header() {
-            return 0;
+        if self.data().first() == Some(&LF) {
+            return 1;
         }
         match self.data().windows(2).position(|w| w == b"\n\n") {
             Some(i) => i + 1,

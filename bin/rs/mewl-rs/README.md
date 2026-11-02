@@ -128,8 +128,8 @@ It also fixes some bugs of `mewl`:
   value, so `a=b c=d` is refused as well. What is in parentheses has
   to be one expression too: `mewl` refuses `(a=b c=d)`, but lets
   `(a=b c=d) | e=f` go as `a=b | e=f`.
-- A message beginning with an empty line has an empty header. `mewl`
-  takes its body for the header.
+- A message beginning with an empty line has an empty header when
+  scanned. `mewl` takes its body for the header then.
 - A number in a range and of `-c` and `-l` must be a decimal number;
   `mewl` reads garbage as 0, so `1-x` means from 1 on. The error is
   "invalid range" or "invalid number", while `mewl` says "negative
