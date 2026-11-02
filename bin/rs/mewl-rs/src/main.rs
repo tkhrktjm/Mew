@@ -60,18 +60,18 @@ fn main() -> ExitCode {
     let result = cli::parse(&argv, flavor).and_then(|command| match command {
         Command::Help => {
             cli::help(reporter.progname(), flavor);
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         Command::Version => {
             cli::version(reporter.progname());
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         Command::Run(opts) => run(&opts, &reporter, &mut out),
     });
     out.flush();
 
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(Error::Usage) => {
             cli::usage(reporter.progname());
             ExitCode::FAILURE
@@ -83,7 +83,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
+/// The exit status is failure if the command of `-e` failed, as in
+/// mewl, though nothing is wrong otherwise.
+fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<ExitCode> {
     let flavor = opts.flavor;
     let (ranges, is_default) = opts.folder_ranges()?;
     let fields = opts.field_set();
@@ -100,7 +102,7 @@ fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
 
     let settings = opts.settings(is_default);
     let folder = &ranges[0].folder;
-    let source = if let Some(path) = &opts.input_file {
+    let mut source = if let Some(path) = &opts.input_file {
         Source::List(ListReader::open(path, folder, settings)?)
     } else if let Some(command) = &opts.exec_command {
         Source::List(ListReader::spawn(command, opts.exec_args.as_deref(), folder, settings, reporter)?)
@@ -109,7 +111,7 @@ fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
     };
 
     let mut printer = Printer::new(mode, fields, opts.body_len, opts.field_len, flavor);
-    for entry in source {
+    for entry in source.by_ref() {
         match entry? {
             Entry::Count(n) => out.put(format!("NumOfMsg: {n}\n").as_bytes()).flush(),
             Entry::Message(mut msg) => {
@@ -125,5 +127,5 @@ fn run(opts: &Options, reporter: &Reporter, out: &mut Output) -> Result<()> {
             }
         }
     }
-    Ok(())
+    Ok(if source.command_failed() { ExitCode::FAILURE } else { ExitCode::SUCCESS })
 }

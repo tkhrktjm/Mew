@@ -6,7 +6,7 @@
 use std::ffi::OsStr;
 use std::io::{self, BufRead, BufReader, Read};
 use std::os::unix::ffi::OsStrExt;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 use super::{Entry, MAX_FILE_NAME_LEN, Message, Settings, check_folder_name, open, open_message};
 use crate::bytes::BytesExt;
@@ -27,6 +27,8 @@ pub struct ListReader {
     /// The default folder does not exist, which is an error when a
     /// message is read before `CD:`.
     default_missing: bool,
+    /// The command of `-e`, `Err(())` if it could not be run.
+    command: Option<std::result::Result<Child, ()>>,
 }
 
 impl ListReader {
@@ -45,7 +47,8 @@ impl ListReader {
     /// folder and reads its stdout. `args` is split by spaces.
     ///
     /// If the command cannot be run, that is reported and nothing is
-    /// read: in mewl, the forked child reports it and exits.
+    /// read: in mewl, the forked child reports it and exits. Either
+    /// way, [`ListReader::command_failed`] tells it at the end.
     pub fn spawn(
         command: &[u8],
         args: Option<&[u8]>,
@@ -65,17 +68,32 @@ impl ListReader {
             Ok(mut child) => {
                 let stdout = child.stdout.take().expect("stdout is piped");
                 reader.input = Box::new(BufReader::new(stdout));
+                reader.command = Some(Ok(child));
             }
-            Err(_) => reporter.warn(&Error::CommandNotFound(command.to_vec())),
+            Err(_) => {
+                reporter.warn(&Error::CommandNotFound(command.to_vec()));
+                reader.command = Some(Err(()));
+            }
         }
         Ok(reader)
     }
 
     fn new(input: Box<dyn BufRead>, folder: &[u8], settings: Settings) -> Result<Self> {
         check_folder_name(folder)?;
-        let mut reader = ListReader { input, folder: folder.to_vec(), settings, default_missing: false };
+        let mut reader = ListReader { input, folder: folder.to_vec(), settings, default_missing: false, command: None };
         reader.enter_folder()?;
         Ok(reader)
+    }
+
+    /// Waits for the command of `-e`, as mewl does at the end, and
+    /// tells whether it failed: it could not be run, exited with a
+    /// status but 0, or was killed by a signal.
+    pub fn command_failed(&mut self) -> bool {
+        match &mut self.command {
+            None => false,
+            Some(Ok(child)) => !child.wait().is_ok_and(|status| status.success()),
+            Some(Err(())) => true,
+        }
     }
 
     fn enter_folder(&mut self) -> Result<()> {
