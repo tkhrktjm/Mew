@@ -138,8 +138,8 @@ It also fixes some bugs of `mewl`:
 - A string in a pattern may be as long as it is. `mewl` keeps it in
   a buffer of `BUFSIZ` bytes, 8192 with glibc, and fails for 8192
   bytes or more ("pattern string is too long.").
-- `-:` is an unknown option, and the help shows the argument of `-x`
-  and lists `key==val` and `key!==val` among the patterns.
+- `-:` is an unknown option, and the help lists `key==val` and
+  `key!==val` among the patterns.
 
 Bugs that need Mew to change are not fixed: for instance, Mew does not
 see the exit status nor the error messages of `mewl`, and passes a
