@@ -217,7 +217,7 @@ fn last_line_kept() {
     }
     /* The last line of the body is escaped, too. */
     assert!(f.run("mewl-rs", &["+inbox", "7"]).ends_with("\nline\n..\n.\n"));
-    assert!(f.run("mewl-rs-compat", &["+inbox", "7"]).ends_with("\nline\n.\n.\n"));
+    assert!(f.run("mewl-rs-compat", &["+inbox", "7"]).ends_with("\nline\n..\n.\n"));
 }
 
 #[test]

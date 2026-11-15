@@ -116,8 +116,6 @@ Invoked as `mewl-rs`, it decodes more than `mewl` does:
 
 It also fixes some bugs of `mewl`:
 
-- The last line of the body beginning with `.` is escaped as the
-  other lines are.
 - Words not quoted after a value in a pick pattern are a part of the
   value, so `subject=foo bar`, which Mew passes for
   `subject='foo bar'`, finds `foo bar`, while `mewl` refuses it as a

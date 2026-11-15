@@ -221,8 +221,7 @@ impl Header {
                         p = next;
                     }
                     None => {
-                        /* mewl does not escape the last line. */
-                        let dot_stuffed = self.flavor.fixes_bugs() && self.buf[q..self.len].starts_with(b".");
+                        let dot_stuffed = self.buf[q..self.len].starts_with(b".");
                         body.push(BodyLine { range: q..self.len, dot_stuffed });
                         break;
                     }
@@ -313,7 +312,7 @@ mod tests {
         let compat = header(data, 5, Flavor::Compat);
         let s = compat.summarize(&fields, 5);
         let last = &s.body[1];
-        assert_eq!((compat.bytes(last.range.clone()), last.dot_stuffed), (&b".\n"[..], false));
+        assert_eq!((compat.bytes(last.range.clone()), last.dot_stuffed), (&b".\n"[..], true));
 
         let utf8 = header(data, 5, Flavor::Utf8);
         let s = utf8.summarize(&fields, 5);
