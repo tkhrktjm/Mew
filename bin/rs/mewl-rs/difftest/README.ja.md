@@ -31,13 +31,11 @@ mewl-rs には独自のバージョンがあるので、`-v` が表示するバ�
 これを使う):
 
 ```
-% mkdir /tmp/c && git archive b792ffa | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive a641ecc | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
 
-b792ffa は、2dd6a0e の main に PR #322 (`-:` を未知のオプションとする)
-を加えたもので、mewl-rs-compat はこれに従う。PR #322 は dae3f98 で
-main にマージされ、b792ffa の bin/ は 5a5cf46 の main と同じである。
+a641ecc は PR #344 をマージした main で、mewl-rs-compat はこれに従う。
 
 mewl-rs:
 
@@ -65,7 +63,7 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 | `uni` | 1626 | Unicode の大文字小文字の畳み込みと NFC による pick |
 | `utf7` | 471 | UTF-7 と UTF-7-IMAP の、正しい、および不正な encoded-word に対する pick と sort |
 | `iso2022jp` | 252 | ISO-2022-JP とその変種の encoded-word、および生の ISO-2022-JP に対する pick と sort |
-| `charset` | 331 | 179 個の charset 名 (Encoding Standard の名前、glibc の名前、その両方、どちらでもないもの、glibc が正規化した綴り) それぞれの encoded-word、26 の 1 バイト charset のテキスト、Shift_JIS と EUC-JP とその変種の 11 のテキストに対する pick と sort |
+| `charset` | 355 | 179 個の charset 名 (Encoding Standard の名前、glibc の名前、その両方、どちらでもないもの、glibc が正規化した綴り) それぞれの encoded-word、26 の 1 バイト charset のテキスト、Shift_JIS と EUC-JP とその変種の 11 のテキスト、UTF-16 と UCS-2、EUC-KR とその変種、glibc が合成する charset、`utf8` という名前の UTF-8 の 19 のテキストに対する pick と sort |
 | `wellformed` | 3000 | 空のフォルダに対する、正しい形の pick のパターン |
 
 `--corpus-a` と `--corpus-b` は、修正の影響を見分けるために、バイナリ
@@ -83,16 +81,16 @@ mewl-rs の動作は起動したときの名前で決まるので、`--name-a` �
 ## 期待される結果
 
 iconv と utf8proc 2.10 付きで (`--enable-utf8proc-char-fold` なしで)
-ビルドした b792ffa の C 版 mewl に対して、mewl-rs-compat は 8005 ケース
+ビルドした a641ecc の C 版 mewl に対して、mewl-rs-compat は 8029 ケース
 中 15 ケースで異なる。どれも `charset` スイートにあり、../README.ja.md に
 書いた既知の違いによる。glibc は知っているが mewl-rs は知らない charset
 (UTF-32、UCS-4、JOHAB、ISO-2022-KR、ISO-2022-CN、EBCDIC) の
-encoded-word と、`mewl` が最後の文字を失う windows-1258 である。
+encoded-word である。
 
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 8005 run, 15 mismatches
+TOTAL: 8029 run, 15 mismatches
 ```
 
 30 秒 (FIFO では 5 秒) で終わらない実行はタイムアウトとみなす。

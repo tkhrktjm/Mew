@@ -30,13 +30,11 @@ The C mewl of a revision, with iconv and, if installed, utf8proc
 (libutf8proc-dev on Debian; the mewl of main uses it when found):
 
 ```
-% mkdir /tmp/c && git archive b792ffa | tar -x -C /tmp/c
+% mkdir /tmp/c && git archive a641ecc | tar -x -C /tmp/c
 % cd /tmp/c/bin && ./configure && make mewl
 ```
 
-b792ffa is main of 2dd6a0e with PR #322 (`-:` as an unknown option),
-which mewl-rs-compat follows. PR #322 was merged into main as dae3f98,
-and bin/ of b792ffa is the same as that of main 5a5cf46.
+a641ecc is main with PR #344, which mewl-rs-compat follows.
 
 mewl-rs:
 
@@ -65,7 +63,7 @@ same as mewl.
 | `uni` | 1626 | pick with Unicode case folding and NFC |
 | `utf7` | 471 | pick and sort on encoded-words in UTF-7 and UTF-7-IMAP, valid and invalid |
 | `iso2022jp` | 252 | pick and sort on encoded-words in ISO-2022-JP and its variants, and on raw ISO-2022-JP |
-| `charset` | 331 | pick and sort on an encoded-word in each of 179 charset names, of the Encoding Standard, of glibc, of both, of neither, and spelled as glibc normalizes them, and on texts in 26 single-byte charsets and 11 texts in Shift_JIS, EUC-JP, and their variants |
+| `charset` | 355 | pick and sort on an encoded-word in each of 179 charset names, of the Encoding Standard, of glibc, of both, of neither, and spelled as glibc normalizes them, on texts in 26 single-byte charsets and 11 texts in Shift_JIS, EUC-JP, and their variants, and on 19 texts in UTF-16 and UCS-2, EUC-KR and its variants, charsets that glibc composes, and UTF-8 named `utf8` |
 | `wellformed` | 3000 | well-formed pick patterns on an empty folder |
 
 `--corpus-a` and `--corpus-b` choose a variant of the corpus for each
@@ -82,18 +80,17 @@ binary, to tell the effects of fixes apart:
 
 ## Expected results
 
-Against the C mewl of b792ffa built with iconv and utf8proc 2.10
+Against the C mewl of a641ecc built with iconv and utf8proc 2.10
 (without `--enable-utf8proc-char-fold`), mewl-rs-compat differs in 15
-of the 8005 cases, all in the `charset` suite, for the known
+of the 8029 cases, all in the `charset` suite, for the known
 differences in ../README.md: on encoded-words in charsets that glibc
 knows but mewl-rs does not (UTF-32, UCS-4, JOHAB, ISO-2022-KR,
-ISO-2022-CN, and EBCDIC), and in windows-1258, whose last character
-`mewl` loses.
+ISO-2022-CN, and EBCDIC).
 
 ```
 % ./difftest.py /tmp/c/bin/mewl ../target/release/mewl-rs --name-b mewl-rs-compat
 ...
-TOTAL: 8005 run, 15 mismatches
+TOTAL: 8029 run, 15 mismatches
 ```
 
 A run which does not end in 30 seconds, or in 5 for the FIFO, is

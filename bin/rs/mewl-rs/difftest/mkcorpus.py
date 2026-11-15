@@ -20,8 +20,9 @@ DIR/home/Mail gets these folders (HOME is DIR/home when mewl runs):
               ISO-2022-JP in a header
   charset     an encoded-word of "mewl" in each of many charset names:
               those of the Encoding Standard, of glibc, of neither, and
-              their spellings; and texts in single-byte charsets and
-              in Shift_JIS and EUC-JP and their variants
+              their spellings; and texts in single-byte charsets, in
+              Shift_JIS and EUC-JP and their variants, and in UTF-16,
+              EUC-KR, and charsets that glibc composes
 
 DIR/cwd gets list1, list2 and list3, the lists for -i, and is where mewl
 runs.
@@ -33,7 +34,7 @@ import random
 import sys
 
 # Bump this when the corpus changes, so that difftest.py makes it again.
-VERSION = 8
+VERSION = 9
 
 
 def w(path, data):
@@ -279,12 +280,30 @@ JIS_TEXTS = [
 ]
 
 
+# Texts in UTF-16 with and without a byte order mark, which mewl takes
+# for the order of utf-16 (RFC 2781); in EUC-KR and its variants: a
+# hangul only in CP949 (U+B620, 8C 63), "㉾" (U+327E, A2 E8), which only
+# EUC-KR has, a pair that is neither, and C1 controls, which mewl tells
+# from CP949 to retry euc-kr and ks_c_5601-1987 with EUC-KR; in
+# windows-1258 and windows-1255 with a combining mark at the end, which
+# glibc composes with the letter before it; and in UTF-8 named utf8.
+MULTI_TEXTS = [
+    ("utf-16", b"\xff\xfem\x00e\x00w\x00l\x00"), ("UTF-16", b"\xfe\xff\x00m\x00e\x00w\x00l"),
+    ("utf-16", b"\x00m\x00e\x00w\x00l"), ("Utf-16", b"\xfe\xff\xfe\xff\x5c\x71"), ("utf-16", b"\x71\x5c\x30\x75"),
+    ("euc-kr", b"\x8c\x63\xc7\xd1"), ("euc-kr", b"\xa2\xe8\xc7\xd1"), ("ks_c_5601-1987", b"\xa2\xe8\xc7\xd1"),
+    ("euc-kr", b"\xa2\xe8\x8c\x63"), ("ks_c_5601-1987", b"\xa2\xe9\xc7\xd1"), ("euc-kr", b"\xff\xa2\xe8"),
+    ("euckr", b"\x8c\x63\xa2\xe8"), ("cp949", b"\x8c\x63\xa2\xe8\xc7\xd1"),
+    ("windows-1258", b"cafe\xec"), ("windows-1255", b"\xf9\xd1"), ("utf8", "日本".encode()),
+    ("utf-16le", b"m\x00\xdc\xdf\xfe"), ("utf-16", b"\x00m\xdc\xfe\xdf"), ("ucs-2", b"\x3d\xd8\xa9\xdc"),
+]
+
+
 def make_charset(mail):
     """charset: an encoded-word of "mewl" in each charset name, and texts
-    in single-byte charsets and in Shift_JIS and EUC-JP."""
+    in single-byte charsets, in Shift_JIS and EUC-JP, and in others."""
     mail = os.path.join(mail, "charset")
     os.makedirs(mail, exist_ok=True)
-    words = [(name, b"mewl") for name in CHARSET_NAMES] + CHARSET_TEXTS + JIS_TEXTS
+    words = [(name, b"mewl") for name in CHARSET_NAMES] + CHARSET_TEXTS + JIS_TEXTS + MULTI_TEXTS
     for i, (name, text) in enumerate(words, 1):
         word = b"=?" + name.encode() + b"?B?" + base64.b64encode(text) + b"?="
         w(f"{mail}/{i}", b"Subject: " + word + b"\nX-Charset: " + name.encode() + b"\nFrom: x@example.com\n\nbody\n")

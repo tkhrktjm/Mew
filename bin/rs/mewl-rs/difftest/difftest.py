@@ -28,8 +28,9 @@ Suites (--suite, all but wellformed by default):
   iso2022jp  pick and sort on encoded-words in ISO-2022-JP and its
              variants, and on raw ISO-2022-JP (folder +iso2022jp)
   charset    pick on encoded-words in many charset names, to see which
-             names are known, and on texts in single-byte charsets and
-             in Shift_JIS and EUC-JP (folder +charset)
+             names are known, and on texts in single-byte charsets, in
+             Shift_JIS and EUC-JP, and in UTF-16, EUC-KR, and others
+             (folder +charset)
   wellformed 3000 well-formed pick patterns on an empty folder, to see
              that two parsers accept and refuse the same ones
 
@@ -339,8 +340,11 @@ def suite_charset(r):
         for codec in GUESS_CODECS:
             chars |= set(text.decode(codec, "ignore"))
     chars |= set("日本〜～‖∥−－¢￠£￡¬￢—―¥‾~①ⅰ￤¦ｱ\ue000\ue3ac\x85")
+    chars |= set("山田煜ふ\ufeff똠한㉾\x8c\udca2\udce8\udce9\udcff\ufedf\ua9d8💩\udcdc")
     for c in sorted(chars - set('"\\')):
         r.check(["-p", f'subject=="{c}"', "+charset"])
+    for v in ["café", "שׁ", "\udca2\udce9한", "\udca2\udce8", "똠\udca2", "m\udcdc\ufedf", "=\ua9d8\udcdc"]:
+        r.check(["-p", f'subject=="{v}"', "+charset"])
     r.check(["-d", "subject:", "+charset"])
 
 
