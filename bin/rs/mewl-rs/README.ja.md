@@ -198,9 +198,13 @@ encoding_rs (Encoding Standard) による。Unicode の正規化は utf8proc で
   ビッグエンディアンとして扱う。しかし、`utf16` など UTF-16 のほかの名前と
   `unicode` (UCS-2) はリトルエンディアンとして扱い、glibc がこれらで
   読み取り、次の encoded-word まで持ち越すらしいバイト順マークは扱わない。
-- windows-1255 と windows-1258 は glibc の合成なしで変換する。`mewl` は
-  iconv を flush しないので、後に続くものと合成されうる encoded-word の
-  最後の文字を失う。"café" は "caf" になる。
+- windows-1255 と windows-1258 は、文字とその後の結合文字を 1 文字に
+  まとめる glibc の合成なしで変換する。pick は NFC の後で比べるので、
+  違いが出ることはまれである。ただし、フィールドのほかの部分が正しい
+  UTF-8 でなく、NFC にかからないときは違いが出る。また、文字の直後の
+  不正なバイトを、`mewl` は glibc が合成のために文字を留めておくので、
+  その文字より前に書き出す。glibc の windows-1255 にない 0xCA は U+05BA
+  とする。
 - ISO-2022-JP-3 は ISO-2022-JP として変換し、glibc が知っている
   JIS X 0213 と JIS X 0201 のカタカナは扱わない。
 - UTF-7 中の対にならない下位サロゲートは、それを補う文字を不正にする。

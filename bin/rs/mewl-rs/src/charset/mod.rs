@@ -188,18 +188,20 @@ struct Renamed {
 }
 
 /// The table of mewl, `rfc2047_charsets`. EUC-KR is opened as CP949,
-/// and retried as EUC-KR for "㉾" (U+327E), which CP949 lacks.
-const RENAMED: [Renamed; 10] = [
+/// and retried as EUC-KR for "㉾" (U+327E), which CP949 lacks. TIS-620
+/// is opened as CP874, its superset in glibc too.
+const RENAMED: [Renamed; 11] = [
     Renamed { mime: b"ks_c_5601-1987", iconv: Some(b"CP949"), retry: Some(b"EUC-KR"), subset: true },
     Renamed { mime: b"euc-kr", iconv: Some(b"CP949"), retry: Some(b"EUC-KR"), subset: true },
     Renamed { mime: b"windows-31j", iconv: Some(b"CP932"), retry: None, subset: false },
     Renamed { mime: b"iso-8859-8-i", iconv: Some(b"ISO-8859-8"), retry: None, subset: false },
+    Renamed { mime: b"utf8", iconv: Some(b"UTF-8"), retry: None, subset: false },
+    Renamed { mime: b"tis-620", iconv: Some(b"CP874"), retry: None, subset: false },
     Renamed { mime: b"iso-2022-jp", iconv: None, retry: Some(b"CP50221"), subset: false },
     Renamed { mime: b"shift_jis", iconv: None, retry: Some(b"CP932"), subset: false },
     Renamed { mime: b"euc-jp", iconv: None, retry: Some(b"EUC-JP-MS"), subset: false },
     Renamed { mime: b"gb2312", iconv: None, retry: Some(b"GB18030"), subset: false },
     Renamed { mime: b"big5", iconv: None, retry: Some(b"BIG5-HKSCS"), subset: false },
-    Renamed { mime: b"tis-620", iconv: None, retry: Some(b"CP874"), subset: false },
 ];
 
 /// The charset of an encoded-word.
@@ -224,7 +226,8 @@ impl Charset {
                     retry = renamed.retry;
                     subset = renamed.subset;
                 }
-                let mut converter = glibc_converter(iconv);
+                /* the name itself if glibc does not know the new one */
+                let mut converter = glibc_converter(iconv).or_else(|| glibc_converter(name));
                 if name.eq_ignore_ascii_case(b"UTF-16") {
                     /* by the BOM, not as the converter of glibc does */
                     converter = Some(Converter::Utf16);
@@ -440,8 +443,10 @@ mod tests {
         assert_eq!(decode("ISO-8859-9", b"\x80\xd0"), Some("\u{80}Ğ".into()));
         assert_eq!(decode("TIS-620", b"\xa1"), Some("ก".into()));
         assert_eq!(Charset::for_name(b"TIS620", Rules::Glibc).unwrap().convert(b"\x80"), Some(b"\x80".to_vec()));
-        /* but tis-620, in any case, is retried with CP874 */
+        /* but tis-620, in any case, is CP874 */
         assert_eq!(decode("TIS-620", b"\x80"), Some("€".into()));
+        assert_eq!(glibc("tis-620"), glibc("cp874"));
+        assert_eq!(glibc("UTF8"), glibc("utf-8"));
         /* An undefined byte of windows-125x is invalid. */
         assert_eq!(Charset::for_name(b"windows-1252", Rules::Glibc).unwrap().convert(b"\x81\x80"), Some(b"\x81\xe2\x82\xac".to_vec()));
     }

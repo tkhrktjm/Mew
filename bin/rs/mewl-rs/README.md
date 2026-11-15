@@ -204,9 +204,12 @@ not by utf8proc. So a few results differ from `mewl`'s:
   byte order mark which glibc takes for them and seems to keep for the
   next encoded-words.
 - windows-1255 and windows-1258 are converted without the composition
-  of glibc, by which `mewl` loses the last character of an
-  encoded-word that may be composed with what follows, as it never
-  flushes iconv: "café" is "caf".
+  of glibc, which joins a letter and a combining mark after it into
+  one character. As pick compares them after NFC, this seldom matters,
+  but it does when another part of the field is not valid UTF-8, which
+  keeps the field from being normalized. And `mewl` writes an invalid
+  byte right after a letter before it, which glibc holds back for the
+  composition, and 0xCA, which glibc lacks in windows-1255, is U+05BA.
 - ISO-2022-JP-3 is converted as ISO-2022-JP, without JIS X 0213 and
   the Katakana of JIS X 0201, which glibc knows.
 - A lone low surrogate in UTF-7 makes the character completing it
