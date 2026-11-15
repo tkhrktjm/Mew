@@ -273,6 +273,41 @@ lists with NUL, 7 runs with `-e` whose command fails, `-h`, and the
 | 38. take a pattern in hexadecimal by -P as mewl of 2dd6a0e does | `./difftest.py C-b792ffa rs/38 --name-b mewl-rs-compat` | 8005 run, 15 mismatches, the 15 known |
 | | `./difftest.py rs/37 rs/38 --name-a mewl-rs-compat --name-b mewl-rs-compat`, and the same with `--name-a mewl-rs --name-b mewl-rs` | 8005 run, 36 mismatches each: 35 runs with `-P` and `-h` |
 
+Steps 41 to 47 follow main of 6e55dc5 (PR #336), 8b0c60e (PR #339),
+1747315 (PR #343), and a641ecc (PR #342 and PR #344). The C mewl
+before 1747315 aborts on a text in `ks_c_5601-1987` with A2 E8 in
+`+charset`, so the rows compare with C-a641ecc. Before them, rs/40
+differs from it in 940 cases: those on the last byte of a message
+(PR #336) and on a dot beginning the last line of the body (PR #339),
+21 picks on texts in UTF-16, UCS-2, and EUC-KR, and the 15 known.
+
+| 41. keep the last byte of a message as mewl of 6e55dc5 does | `./difftest.py C-a641ecc rs/41 --name-b mewl-rs-compat` | 8029 run, 413 mismatches |
+| | `./difftest.py rs/40 rs/41 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 879 mismatches, as many as between C-b792ffa and C-6e55dc5 |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 359 mismatches, runs on +inbox/13, more than 64KB, whose last byte read is now kept |
+
+| 42. escape the last line of the body as mewl of 8b0c60e does | `./difftest.py C-a641ecc rs/42 --name-b mewl-rs-compat` | 8029 run, 36 mismatches: 21 picks on texts in UTF-16, UCS-2, and EUC-KR, and the 15 known |
+| | `./difftest.py rs/41 rs/42 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 377 mismatches, as many as between C-6e55dc5 and C-8b0c60e |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches |
+
+| 43. take the byte order of utf-16 from its BOM as mewl of a641ecc does | `./difftest.py C-a641ecc rs/43 --name-b mewl-rs-compat` | 8029 run, 31 mismatches |
+| | `./difftest.py rs/42 rs/43 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 14 mismatches, picks on texts in `utf-16` |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches |
+
+| 44. keep invalid bytes of UTF-16 as glibc and mewl do | `./difftest.py C-a641ecc rs/44 --name-b mewl-rs-compat` | 8029 run, 25 mismatches |
+| | `./difftest.py rs/43 rs/44 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 6 mismatches, picks on texts with a surrogate not in a pair in `utf-16le`, `utf-16`, and `ucs-2` |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches |
+
+| 45. keep invalid bytes of CP949 as glibc and mewl of 1747315 do | `./difftest.py C-a641ecc rs/45 --name-b mewl-rs-compat` | 8029 run, 18 mismatches |
+| | `./difftest.py rs/44 rs/45 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 7 mismatches, picks on texts with invalid bytes in `euc-kr`, `ks_c_5601-1987`, and `cp949` |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches |
+
+| 46. open euc-kr as CP949 and retry it as EUC-KR as mewl of a641ecc does | `./difftest.py C-a641ecc rs/46 --name-b mewl-rs-compat` | 8029 run, 15 mismatches, the 15 known |
+| | `./difftest.py rs/45 rs/46 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 4 mismatches, picks on U+327E in `euc-kr` and `ks_c_5601-1987`, and on `euckr` with 0x8C, now a C1 control |
+| | the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches |
+
+| 47. rename utf8 and tis-620 as mewl of a641ecc does | `./difftest.py C-a641ecc rs/47 --name-b mewl-rs-compat` | 8029 run, 15 mismatches, the 15 known |
+| | `./difftest.py rs/46 rs/47 --name-a mewl-rs-compat --name-b mewl-rs-compat`, and the same with `--name-a mewl-rs --name-b mewl-rs` | 8029 run, 0 mismatches each |
+
 The corpus of steps 10 to 14 has no `+iso2022jp`; it is made again
 for step 15, and the counts of 7320 cases become those of 7572. It is
 made again for step 16 with `+charset`, and those of 7572 become those
@@ -283,10 +318,12 @@ steps. The rows of steps 24 to 29 are on the corpus of step 28, with
 numbers around `INT_MAX` and `UINT_MAX`, strings around `BUFSIZ`, and
 a FIFO, 7945. The rows of steps 32 to 38 are on the cases of step 39,
 with `-P`, `-e` whose command fails, and `head` with a newline, 8005.
+The rows of steps 41 to 47 are on the cases of step 48, with texts in
+UTF-16, EUC-KR, and others, 8029.
 
 As far as the differential test sees, mewl-rs-compat changes only in
-steps 4, 8, 14, 24 to 26, and 32 to 38, which follow main (and
-PR #322 in step 37), in steps 10 and 15, which decode UTF-7 and
+steps 4, 8, 14, 24 to 26, 32 to 38, and 41 to 46, which follow main
+(and PR #322 in step 37), in steps 10 and 15, which decode UTF-7 and
 ISO-2022-JP, and in steps 16 to 18, which know charset names and
 convert single-byte charsets and Shift_JIS and EUC-JP as glibc does;
 in the other steps it is the same as before, e.g. 0 mismatches

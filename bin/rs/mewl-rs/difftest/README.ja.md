@@ -274,6 +274,41 @@ C-2dd6a0e と 408 ケースで異なる: 一つの式になっていないパタ
 | 38. take a pattern in hexadecimal by -P as mewl of 2dd6a0e does | `./difftest.py C-b792ffa rs/38 --name-b mewl-rs-compat` | 8005 run, 15 mismatches、既知の 15 |
 | | `./difftest.py rs/37 rs/38 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 8005 run, 36 mismatches: `-P` の実行 35 と `-h` |
 
+手順 41 から 47 は、6e55dc5 (PR #336)、8b0c60e (PR #339)、1747315
+(PR #343)、a641ecc (PR #342 と PR #344) の main に従う。1747315 より前の
+C 版 mewl は、`+charset` にある A2 E8 を含む `ks_c_5601-1987` のテキストで
+異常終了するので、これらの行は C-a641ecc と比べる。その前の rs/40 は、
+C-a641ecc と 940 ケースで異なる: メッセージの最後のバイト (PR #336) と
+本文の最終行の先頭のドット (PR #339) に関するもの、UTF-16、UCS-2、EUC-KR の
+テキストに対する pick 21、既知の 15。
+
+| 41. keep the last byte of a message as mewl of 6e55dc5 does | `./difftest.py C-a641ecc rs/41 --name-b mewl-rs-compat` | 8029 run, 413 mismatches |
+| | `./difftest.py rs/40 rs/41 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 879 mismatches、C-b792ffa と C-6e55dc5 の間と同じ数 |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 359 mismatches、64KB を超える +inbox/13 に対する実行。読んだ最後のバイトを保つようになった |
+
+| 42. escape the last line of the body as mewl of 8b0c60e does | `./difftest.py C-a641ecc rs/42 --name-b mewl-rs-compat` | 8029 run, 36 mismatches: UTF-16、UCS-2、EUC-KR のテキストに対する pick 21、既知の 15 |
+| | `./difftest.py rs/41 rs/42 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 377 mismatches、C-6e55dc5 と C-8b0c60e の間と同じ数 |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 0 mismatches |
+
+| 43. take the byte order of utf-16 from its BOM as mewl of a641ecc does | `./difftest.py C-a641ecc rs/43 --name-b mewl-rs-compat` | 8029 run, 31 mismatches |
+| | `./difftest.py rs/42 rs/43 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 14 mismatches、`utf-16` のテキストに対する pick |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 0 mismatches |
+
+| 44. keep invalid bytes of UTF-16 as glibc and mewl do | `./difftest.py C-a641ecc rs/44 --name-b mewl-rs-compat` | 8029 run, 25 mismatches |
+| | `./difftest.py rs/43 rs/44 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 6 mismatches、`utf-16le`、`utf-16`、`ucs-2` の対になっていないサロゲートを含むテキストに対する pick |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 0 mismatches |
+
+| 45. keep invalid bytes of CP949 as glibc and mewl of 1747315 do | `./difftest.py C-a641ecc rs/45 --name-b mewl-rs-compat` | 8029 run, 18 mismatches |
+| | `./difftest.py rs/44 rs/45 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 7 mismatches、`euc-kr`、`ks_c_5601-1987`、`cp949` の不正なバイトを含むテキストに対する pick |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 0 mismatches |
+
+| 46. open euc-kr as CP949 and retry it as EUC-KR as mewl of a641ecc does | `./difftest.py C-a641ecc rs/46 --name-b mewl-rs-compat` | 8029 run, 15 mismatches、既知の 15 |
+| | `./difftest.py rs/45 rs/46 --name-a mewl-rs-compat --name-b mewl-rs-compat` | 8029 run, 4 mismatches、`euc-kr` と `ks_c_5601-1987` の U+327E と、0x8C が C1 制御文字になった `euckr` に対する pick |
+| | 同じものを `--name-a mewl-rs --name-b mewl-rs` で | 8029 run, 0 mismatches |
+
+| 47. rename utf8 and tis-620 as mewl of a641ecc does | `./difftest.py C-a641ecc rs/47 --name-b mewl-rs-compat` | 8029 run, 15 mismatches、既知の 15 |
+| | `./difftest.py rs/46 rs/47 --name-a mewl-rs-compat --name-b mewl-rs-compat` と、同じものを `--name-a mewl-rs --name-b mewl-rs` で | それぞれ 8029 run, 0 mismatches |
+
 手順 10 から 14 のコーパスには `+iso2022jp` がない。手順 15 でコーパスを
 作り直し、7320 ケースの件数は 7572 ケースの件数になる。手順 16 で
 `+charset` を加えて作り直して 7572 が 7585 に、手順 17 で `+charset` に
@@ -283,13 +318,14 @@ C-2dd6a0e と 408 ケースで異なる: 一つの式になっていないパタ
 `INT_MAX` と `UINT_MAX` 前後の番号、`BUFSIZ` 前後の文字列、FIFO を
 加えた手順 28 のコーパス (7945) による。手順 32 から 38 の行は、`-P`、
 コマンドが失敗する `-e`、改行を含む `head` を加えた手順 39 のケース
-(8005) による。
+(8005) による。手順 41 から 47 の行は、UTF-16、EUC-KR などのテキストを
+加えた手順 48 のケース (8029) による。
 
 差分テストで見る限り、mewl-rs-compat が変わるのは、main に従う手順 4、
-8、14、24 から 26、32 から 38 (手順 37 は PR #322 に従う)、UTF-7 と
-ISO-2022-JP を復号する手順 10 と 15、charset 名を知り、1 バイト charset
-と Shift_JIS と EUC-JP を glibc と同じように変換する手順 16 から 18
-だけである。それ以外の手順では前と同じで、たとえば、ともに
+8、14、24 から 26、32 から 38 (手順 37 は PR #322 に従う)、41 から 46、
+UTF-7 と ISO-2022-JP を復号する手順 10 と 15、charset 名を知り、1 バイト
+charset と Shift_JIS と EUC-JP を glibc と同じように変換する手順 16 から
+18 だけである。それ以外の手順では前と同じで、たとえば、ともに
 mewl-rs-compat として起動した rs/6 と rs/7 の間の不一致は 0 である。
 手順 27 も main に従うが、それはソケットと `fstat()` の失敗についてで、
 コーパスにはこれらがない。
