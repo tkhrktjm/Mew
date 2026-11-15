@@ -60,7 +60,7 @@ impl Printer {
                 Ok(Printed::Line)
             }
             Mode::Pick { pattern, all_fields } => {
-                let header = &mut self.header;
+                let header = &self.header;
                 if !pattern.matches(&mut |key, value, case| header.search(key, value, case))? {
                     Ok(Printed::Nothing)
                 } else if *all_fields {

@@ -211,13 +211,13 @@ fn last_line_kept() {
     let f = Fixture::new("last");
     fs::write(f.dir.join("Mail/inbox/6"), b"Subject: no newline").unwrap();
     fs::write(f.dir.join("Mail/inbox/7"), b"Subject: x\n\nline\n.").unwrap();
-    assert_eq!(f.run("mewl-rs", &["-d", "subject:", "+inbox", "6"]), "6: no newline\n");
-    assert_eq!(f.run("mewl-rs-compat", &["-d", "subject:", "+inbox", "6"]), "6: no newlin\n\n");
-    assert_eq!(f.run("mewl-rs", &["-p", "subject==newline", "+inbox"]), "6\n");
-    assert_eq!(f.run("mewl-rs-compat", &["-p", "subject==newline", "+inbox"]), "");
+    for prog in ["mewl-rs", "mewl-rs-compat"] {
+        assert_eq!(f.run(prog, &["-d", "subject:", "+inbox", "6"]), "6: no newline\n");
+        assert_eq!(f.run(prog, &["-p", "subject==newline", "+inbox"]), "6\n");
+    }
     /* The last line of the body is escaped, too. */
     assert!(f.run("mewl-rs", &["+inbox", "7"]).ends_with("\nline\n..\n.\n"));
-    assert!(f.run("mewl-rs-compat", &["+inbox", "7"]).ends_with("\nline\n\n.\n"));
+    assert!(f.run("mewl-rs-compat", &["+inbox", "7"]).ends_with("\nline\n.\n.\n"));
 }
 
 #[test]

@@ -1,11 +1,10 @@
 //! Reading a message and finding fields in its header.
 //!
 //! Only the first [`MAX_HEADER`] bytes of a message are read into a
-//! buffer, as mewl does. The scanning below keeps a side effect of mewl
-//! since it shows up in the output: reaching the end of the data
-//! overwrites its last byte with LF. So positions are indices into the
-//! buffer, as pointers in mewl, and the order of comparing and skipping
-//! a field is kept.
+//! buffer, as mewl does, and LF is appended to them unless they end
+//! with it, so that every line ends with LF. Positions are indices into
+//! the buffer, as pointers in mewl, and the order of comparing and
+//! skipping a field is kept.
 //!
 //! mewl ends what it reads with NUL, so nothing beyond the data is read.
 
@@ -50,7 +49,8 @@ pub struct Header {
 impl Header {
     pub fn new(field_len: u32, flavor: Flavor) -> Self {
         Header {
-            buf: vec![0; MAX_HEADER].into_boxed_slice(),
+            /* + 1 for an appended LF */
+            buf: vec![0; MAX_HEADER + 1].into_boxed_slice(),
             len: 0,
             field_len,
             flavor,
@@ -60,17 +60,16 @@ impl Header {
     /// Reads the beginning of a message like `fread()`.
     pub fn load(&mut self, message: &mut impl Read) {
         let mut len = 0;
-        while len < self.buf.len() {
-            match message.read(&mut self.buf[len..]) {
+        while len < MAX_HEADER {
+            match message.read(&mut self.buf[len..MAX_HEADER]) {
                 Ok(0) => break,
                 Ok(n) => len += n,
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
         }
-        /* So that the last byte is not overwritten (see next_line()),
-        unless the buffer is full. */
-        if self.flavor.fixes_bugs() && len > 0 && self.buf[len - 1] != LF && len < self.buf.len() {
+        /* So that every line ends with LF, the last one included. */
+        if len > 0 && self.buf[len - 1] != LF {
             self.buf[len] = LF;
             len += 1;
         }
@@ -113,24 +112,19 @@ impl Header {
 
     /// The beginning of the line after `p`. `None` if the data or,
     /// with `header_only`, the header ends.
-    fn next_line(&mut self, p: usize, header_only: bool) -> Option<usize> {
+    fn next_line(&self, p: usize, header_only: bool) -> Option<usize> {
         if p == self.len || (header_only && self.buf[p] == LF) {
             return None;
         }
         let next = match self.buf[p..self.len].iter().position(|&c| c == LF) {
             Some(i) => p + i + 1,
-            None => self.len + 1,
+            None => self.len,
         };
-        if next < self.len {
-            Some(next)
-        } else {
-            self.buf[self.len - 1] = LF;
-            None
-        }
+        (next < self.len).then_some(next)
     }
 
     /// Skips the field beginning at `p` with its continuation lines.
-    fn next_field(&mut self, p: usize, header_only: bool) -> FieldEnd {
+    fn next_field(&self, p: usize, header_only: bool) -> FieldEnd {
         let mut lines: u32 = 0;
         let mut truncated = None;
         let mut line = p;
@@ -185,7 +179,7 @@ impl Header {
 
     /// For scan: finds `fields` in the header and the first `body_len`
     /// lines of the body.
-    pub fn summarize(&mut self, fields: &FieldSet, body_len: u32) -> Summary {
+    pub fn summarize(&self, fields: &FieldSet, body_len: u32) -> Summary {
         let mut found: Vec<Option<Range<usize>>> = vec![None; fields.names().len()];
         let mut body_beg = self.has_empty_header().then_some(1);
         let mut p = 0;
@@ -241,7 +235,7 @@ impl Header {
 
     /// For sort: the value of the first field named `key`, as mewl
     /// prints it. If `key` lacks `:`, the value begins with it.
-    pub fn field_value(&mut self, key: &[u8]) -> Option<Range<usize>> {
+    pub fn field_value(&self, key: &[u8]) -> Option<Range<usize>> {
         let mut p = 0;
         loop {
             let matched = self.is_field(p, key);
@@ -250,8 +244,8 @@ impl Header {
                 let stop = match (end.truncated, end.next) {
                     (Some(t), _) => t - 1,
                     (None, Some(n)) => n - 1,
-                    /* Including the last byte, which is LF now. */
-                    (None, None) => self.len,
+                    /* Excluding the LF at the end of the data. */
+                    (None, None) => self.len - 1,
                 };
                 /* mewl begins the value with ":" if the key lacks it. */
                 let colon = usize::from(self.flavor.fixes_bugs() && !key.ends_with(b":"));
@@ -264,7 +258,7 @@ impl Header {
     /// For pick: whether a field named `key` contains `value`. The key
     /// `head` means the whole header. How a value is decoded and
     /// compared depends on the [`Flavor`].
-    pub fn search(&mut self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
+    pub fn search(&self, key: &[u8], value: &[u8], case_sensitive: bool) -> bool {
         if key == WHOLE_HEADER {
             /* neither decoded (by mewl) nor normalized */
             let case = if case_sensitive { Case::Sensitive } else { Case::Ignore };
@@ -302,39 +296,48 @@ mod tests {
 
     #[test]
     fn summarize_fields_and_body() {
-        let mut h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2, Flavor::Compat);
+        let h = header(b"Subject: a\n b\n c\nReferences: <1>\n <2>\nX: y\n\n.dot\nline\nlast", 2, Flavor::Compat);
         let fields = FieldSet::parse(b"Subject:,References:");
         let s = h.summarize(&fields, 5);
         assert_eq!(h.bytes(s.fields[0].clone().unwrap()), b"Subject: a\n b\n");
         assert_eq!(h.bytes(s.fields[1].clone().unwrap()), b" <2>\n");
         let body: Vec<_> = s.body.iter().map(|l| (h.bytes(l.range.clone()).to_vec(), l.dot_stuffed)).collect();
-        /* The last byte is overwritten with LF as mewl does. */
-        assert_eq!(body, [(b".dot\n".to_vec(), true), (b"line\n".to_vec(), false), (b"las\n".to_vec(), false)]);
+        /* The last line gets LF. */
+        assert_eq!(body, [(b".dot\n".to_vec(), true), (b"line\n".to_vec(), false), (b"last\n".to_vec(), false)]);
     }
 
     #[test]
     fn last_line_kept() {
         let data = b"Subject: abc\n\nline\n.";
         let fields = FieldSet::parse(b"Subject:");
-        let mut compat = header(data, 5, Flavor::Compat);
+        let compat = header(data, 5, Flavor::Compat);
         let s = compat.summarize(&fields, 5);
         let last = &s.body[1];
-        assert_eq!((compat.bytes(last.range.clone()), last.dot_stuffed), (&b"\n"[..], false));
+        assert_eq!((compat.bytes(last.range.clone()), last.dot_stuffed), (&b".\n"[..], false));
 
-        let mut utf8 = header(data, 5, Flavor::Utf8);
+        let utf8 = header(data, 5, Flavor::Utf8);
         let s = utf8.summarize(&fields, 5);
         let last = &s.body[1];
         assert_eq!((utf8.bytes(last.range.clone()), last.dot_stuffed), (&b".\n"[..], true));
 
-        let mut utf8 = header(b"Subject: abc", 5, Flavor::Utf8);
-        assert!(utf8.search(b"subject", b"abc", true));
-        let v = utf8.field_value(b"subject:").unwrap();
-        assert_eq!(utf8.bytes(v), b" abc\n");
+        for flavor in [Flavor::Compat, Flavor::Utf8] {
+            let h = header(b"Subject: abc", 5, flavor);
+            assert!(h.search(b"subject", b"abc", true));
+            let v = h.field_value(b"subject:").unwrap();
+            assert_eq!(h.bytes(v), b" abc");
+        }
+        /* also when the buffer is full */
+        let mut data = b"Subject: abc\n\n".to_vec();
+        data.resize(MAX_HEADER, b'x');
+        let h = header(&data, 5, Flavor::Compat);
+        let s = h.summarize(&fields, 5);
+        assert_eq!(h.bytes(s.body[0].range.clone()).len(), MAX_HEADER - 14 + 1);
+        assert!(h.bytes(s.body[0].range.clone()).ends_with(b"xx\n"));
     }
 
     #[test]
     fn search_and_value() {
-        let mut h = header(b"Subject: Hello World\nFrom: foo\nFrom-Address: bar\n\nbody hello\n", 5, Flavor::Compat);
+        let h = header(b"Subject: Hello World\nFrom: foo\nFrom-Address: bar\n\nbody hello\n", 5, Flavor::Compat);
         assert!(h.search(b"subject", b"hello", false));
         assert!(!h.search(b"subject", b"hello", true));
         assert!(!h.search(b"from", b"bar", false));
@@ -349,8 +352,8 @@ mod tests {
     #[test]
     fn search_decoded() {
         let data = "Subject: =?UTF-8?B?5pel5pys6Kqe?=\nX: Re:=?UTF-8?B?5pel?=\n\n".as_bytes();
-        let mut mewl = header(data, 5, Flavor::Compat);
-        let mut utf8 = header(data, 5, Flavor::Utf8);
+        let mewl = header(data, 5, Flavor::Compat);
+        let utf8 = header(data, 5, Flavor::Utf8);
         assert!(mewl.search(b"subject", "日本".as_bytes(), true));
         assert!(mewl.search(b"subject", "日本".as_bytes(), false));
         assert!(utf8.search(b"subject", "日本".as_bytes(), false));
