@@ -136,6 +136,7 @@ impl Converter {
             Converter::Single(table) => table.convert(input, rules, keep_invalid),
             Converter::Jis(variant) => jis::convert(variant, rules, input, keep_invalid),
             Converter::Patched(patch) if rules == Rules::Rfc => patched::convert(patch, input, keep_invalid),
+            Converter::Patched(Patch::EucKr) => patched::convert_cp949_as_glibc(input, keep_invalid),
             Converter::Patched(patch) => convert(patch.encoding(), input, keep_invalid),
         }
     }
@@ -543,5 +544,14 @@ mod tests {
         assert_eq!(decode("sjis", b"\x81\x60\\\x87\x40"), Some("〜¥\u{fffd}@".into()));
         assert_eq!(decode("euc-jp", b"\xa1\xc1\xad\xa1"), Some("～①".into()));
         assert_eq!(Charset::Glibc { name: None, retry: None }.convert(b"a"), None);
+    }
+
+    #[test]
+    fn cp949_skips_u327e() {
+        /* kept as invalid, but U+327E, which CP949 of glibc skips */
+        assert_eq!(decode("ks_c_5601-1987", b"\xa2\xe8\xc7\xd1"), Some("한".into()));
+        /* one byte at a time: A2, then E9 C7 is a hanja */
+        assert_eq!(decode("ks_c_5601-1987", b"\xa2\xe9\xc7\xd1"), Some("\u{fffd}茸\u{fffd}".into()));
+        assert_eq!(decode("euc-kr", b"\xff\xa2\xe8"), Some("\u{fffd}".into()));
     }
 }

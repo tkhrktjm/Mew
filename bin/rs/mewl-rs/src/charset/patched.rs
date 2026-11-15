@@ -125,9 +125,52 @@ pub fn decode_with(
     push(&mut out, &input[beg..]).then(|| out.into_bytes())
 }
 
+/// Converts `input` in the code page 949 to UTF-8 as the converter of
+/// glibc for CP949 (UHC) does, for `mewl-rs-compat`: by encoding_rs,
+/// whose table is that of glibc. With `keep_invalid`, what is invalid
+/// is kept as it is a byte at a time, going on from the next byte, as
+/// mewl does after glibc fails at a byte; encoding_rs would take an
+/// invalid pair as a whole. "㉾" (U+327E, A2 E8), which CP949 lacks, is
+/// dropped instead, since glibc skips it before it fails.
+pub fn convert_cp949_as_glibc(input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+    if !keep_invalid {
+        let text = EUC_KR.decode_without_bom_handling_and_without_replacement(input)?;
+        return Some(text.into_owned().into_bytes());
+    }
+    let mut out = Vec::with_capacity(input.len() * 2);
+    let mut i = 0;
+    while i < input.len() {
+        let pair = &input[i..input.len().min(i + 2)];
+        if input[i] < 0x80 {
+            out.push(input[i]);
+            i += 1;
+        } else if pair == b"\xa2\xe8" {
+            i += 2;
+        } else if let Some(text) = EUC_KR.decode_without_bom_handling_and_without_replacement(pair).filter(|_| pair.len() == 2) {
+            out.extend_from_slice(text.as_bytes());
+            i += 2;
+        } else {
+            out.push(input[i]);
+            i += 1;
+        }
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cp949_as_glibc() {
+        let conv = |input: &[u8], keep| convert_cp949_as_glibc(input, keep);
+        assert_eq!(conv(b"a\x8c\x63\xc7\xd1", false), Some("a똠한".into()));
+        assert_eq!(conv(b"\xa2\xe8", false), None);
+        /* an invalid pair a byte at a time, but A2 E8 dropped */
+        assert_eq!(conv(b"\xa2\xe9\xc7\xd1", true), Some(b"\xa2\xe8\x8c\xb8\xd1".to_vec()));
+        assert_eq!(conv(b"\xa2\xe8\xc7\xd1\xff\xc7", true), Some(b"\xed\x95\x9c\xff\xc7".to_vec()));
+        assert_eq!(conv(b"\x81\x20\x80", true), Some(b"\x81 \x80".to_vec()));
+    }
 
     fn conv(patch: Patch, input: &[u8]) -> String {
         String::from_utf8(convert(patch, input, true).unwrap()).unwrap()
