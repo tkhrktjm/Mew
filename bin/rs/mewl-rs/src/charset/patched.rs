@@ -80,6 +80,46 @@ pub fn convert(patch: Patch, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>
     })
 }
 
+/// Converts `input` in EUC-KR to UTF-8 as the converter of glibc for
+/// EUC-KR does, for `mewl-rs-compat`: a byte up to 0x9F is US-ASCII or
+/// a C1 control, and a pair of bytes 0xA1 to 0xFE is a character of
+/// KS X 1001, as in the code page 949 but with "㉾" (U+327E), which
+/// the code page 949 of glibc lacks too. With `keep_invalid`, an
+/// invalid byte, or a pair that is not a character, is kept as it is
+/// byte by byte, and so is a lead byte at the end; otherwise it fails.
+pub fn convert_euc_kr_as_glibc(input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() * 2);
+    let mut i = 0;
+    while i < input.len() {
+        let (len, ch) = match &input[i..] {
+            [b @ 0..=0x9f, ..] => (1, Some(char::from(*b))),
+            [0xa1..=0xfe] => (1, None),
+            [lead @ 0xa1..=0xfe, trail @ 0xa1..=0xfe, ..] => {
+                let pair = [*lead, *trail];
+                let ch = Patch::EucKr.char_for(&pair).or_else(|| {
+                    let text = EUC_KR.decode_without_bom_handling_and_without_replacement(&pair)?;
+                    let mut chars = text.chars();
+                    chars.next().filter(|_| chars.next().is_none())
+                });
+                (2, ch)
+            }
+            _ => (1, None),
+        };
+        match ch {
+            Some(ch) => {
+                out.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
+                i += len;
+            }
+            None if keep_invalid => {
+                out.push(input[i]);
+                i += 1;
+            }
+            None => return None,
+        }
+    }
+    Some(out)
+}
+
 /// Converts `input` to UTF-8 by `encoding`, but the characters that
 /// `step` gives: walking the characters as the Encoding Standard does,
 /// it tells the length of the one at the beginning of a slice and the
@@ -188,5 +228,18 @@ mod tests {
         /* incomplete before a character patched, and at the end */
         assert_eq!(conv(Patch::Gb18030, b"\x81\x30\xfe\x51\x81\x30"), "\u{fffd}0\u{20087}\u{fffd}");
         assert_eq!(convert(Patch::Big5, b"\xf9\xfe\xff", false), None);
+    }
+
+    #[test]
+    fn euc_kr_as_glibc() {
+        let conv = |input: &[u8], keep| convert_euc_kr_as_glibc(input, keep);
+        assert_eq!(conv(b"a\xa2\xe8\xc7\xd1", false), Some("a㉾한".into()));
+        /* C1 controls, not the lead bytes of the code page 949 */
+        assert_eq!(conv(b"\x8c\x63", false), Some("\u{8c}c".into()));
+        /* not a character, and a lead byte at the end */
+        assert_eq!(conv(b"\xa2\xe9", false), None);
+        assert_eq!(conv(b"\xa1\x41\xc7", false), None);
+        assert_eq!(conv(b"\xa1\x41\xa2\xe9\xff\xc7", true), Some(b"\xa1A\xa2\xe9\xff\xc7".to_vec()));
+        assert_eq!(conv(b"\xa0\xc7\xd1", true), Some(b"\xa0\xed\x95\x9c".to_vec()));
     }
 }

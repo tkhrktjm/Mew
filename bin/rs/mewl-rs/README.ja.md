@@ -162,7 +162,7 @@ Mew の変更を要するバグは直していない。たとえば、Mew は `m
 charset の名前は、glibc 付きの `mewl` と同じように解釈する。`mewl` は
 `ks_c_5601-1987` を `CP949` にするように、いくつかの MIME の charset 名を
 iconv 向けに読み替え、`shift_jis` を `CP932` で試すように、変換に失敗した
-ときにいくつかを上位集合で再試行する。glibc は名前の大文字小文字と、
+ときにいくつかを別の charset で再試行する。glibc は名前の大文字小文字と、
 英字、数字、`_-.,:` 以外の文字を無視するので、`utf~8` は UTF-8 である。
 また、`x-sjis` や `gb_2312` のような Encoding Standard の名前の一部を
 知らない。glibc が知っている名前の一覧 `src/charset/glibc.rs` は
@@ -181,12 +181,15 @@ glibc と同じように変換する: Shift_JIS と EUC-JP では、JIS X 0208 �
 不正な並びと glibc の表も含めて glibc と同じように変換し、このうち
 ISO-2022-JP だけを Windows の表で定義する Encoding Standard には従わない。
 たとえば "①" は ISO-2022-JP にはなく、glibc にない ISO-2022-JP-1 は
-復号しない。それ以外の charset の変換は iconv ではなく
+復号しない。EUC-KR と CP949 (UHC) も glibc と同じように変換する: glibc の
+CP949 の表は encoding_rs のものと同じで "㉾" (U+327E) がなく、その
+変換器はこの文字を読み飛ばす。一方 EUC-KR はこの文字を持ち、0x80 から
+0x9F を C1 制御文字とする。それ以外の charset の変換は iconv ではなく
 encoding_rs (Encoding Standard) による。Unicode の正規化は utf8proc では
 なく unicode-normalization と caseless による。そのため、`mewl` と結果が
 異なる場合が少しある:
 
-- ほかのマルチバイトの charset、たとえば GBK、Big5、EUC-KR は Encoding
+- ほかのマルチバイトの charset、たとえば GBK と Big5 は Encoding
   Standard の表を使い、glibc の表とは異なる。
 - glibc は知っているが encoding_rs と mewl-rs が知らない charset、たとえば
   UTF-32、UCS-4、ISO-2022-KR、ISO-2022-CN、JOHAB、EBCDIC の encoded-word は

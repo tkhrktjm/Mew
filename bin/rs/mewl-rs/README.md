@@ -164,8 +164,8 @@ output, and options are the same as `mewl`'s (see `mewl(1)`). As
 
 A charset is named as `mewl` with glibc names it. `mewl` renames a
 few MIME charset names for iconv, such as `ks_c_5601-1987` to `CP949`,
-and retries a few with a superset when the conversion fails, such as
-`shift_jis` with `CP932`. glibc ignores the case of a name and the
+and retries a few with another charset when the conversion fails, such
+as `shift_jis` with `CP932`. glibc ignores the case of a name and the
 characters in it but letters, digits, and `_-.,:`, so that `utf~8` is
 UTF-8, and does not know some names of the Encoding Standard, such as
 `x-sjis` and `gb_2312`. `tools/glibc-charsets.py` makes the list of the
@@ -185,13 +185,16 @@ ISO-2022-JP, ISO-2022-JP-2, UTF-7, and UTF-7-IMAP are converted as
 glibc does, invalid sequences and the tables of glibc included, not as
 the Encoding Standard, which knows only ISO-2022-JP, with the table of
 Windows: e.g. "①" is not in ISO-2022-JP, and ISO-2022-JP-1, which
-glibc lacks, is not decoded. The other
+glibc lacks, is not decoded. EUC-KR and CP949 (UHC) are converted as
+glibc does too: the table of glibc for CP949 is that of encoding_rs,
+without "㉾" (U+327E), which its converter skips, while EUC-KR has the
+character and takes 0x80 to 0x9F for C1 controls. The other
 charsets are converted by encoding_rs (the Encoding Standard), not by
 iconv. Unicode is normalized by unicode-normalization and caseless,
 not by utf8proc. So a few results differ from `mewl`'s:
 
-- The other multibyte charsets, such as GBK, Big5, and EUC-KR, have
-  the tables of the Encoding Standard, which are not those of glibc.
+- The other multibyte charsets, such as GBK and Big5, have the tables
+  of the Encoding Standard, which are not those of glibc.
 - An encoded-word in a charset which glibc knows but encoding_rs and
   mewl-rs do not, such as UTF-32, UCS-4, ISO-2022-KR, ISO-2022-CN,
   JOHAB, and EBCDIC, is not decoded.

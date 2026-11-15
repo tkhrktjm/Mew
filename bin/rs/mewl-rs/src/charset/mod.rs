@@ -1,13 +1,13 @@
 //! Charsets of encoded-words and their conversion to UTF-8.
 //!
 //! mewl converts a charset with iconv: it renames a few MIME charset
-//! names for iconv and, for a few others, retries with a superset when
-//! the conversion fails (see [`RENAMED`]). `mewl-rs-compat` does the
-//! same, knowing a name as glibc does: [`glibc::NAMES`] lists the names
-//! glibc knows for each converter emulated. A single-byte charset is
+//! names for iconv and retries a few with another charset when the
+//! conversion fails (see [`RENAMED`]). `mewl-rs-compat` does the same,
+//! knowing a name as glibc does: [`glibc::NAMES`] lists the names glibc
+//! knows for each converter emulated. A single-byte charset is
 //! converted by the table of glibc, Shift_JIS and EUC-JP by
-//! [`crate::jis`], and the others by encoding_rs or a decoder of
-//! mewl-rs.
+//! [`crate::jis`], EUC-KR as glibc does ([`patched`]), and the others
+//! by encoding_rs or a decoder of mewl-rs.
 //!
 //! `mewl-rs` knows the names of the Encoding Standard and, for the
 //! converters emulated, those of glibc as well, and converts a charset
@@ -56,8 +56,12 @@ pub enum Converter {
     /// Shift_JIS, EUC-JP, or a variant.
     Jis(jis::Variant),
     /// GB 2312, GB18030, EUC-KR, or Big5: by encoding_rs, and for
-    /// [`Rules::Rfc`] with a few characters as Emacs takes them.
+    /// [`Rules::Rfc`] with a few characters as Emacs takes them. EUC-KR
+    /// is the code page 949, as glibc names UHC.
     Patched(Patch),
+    /// EUC-KR as glibc converts it, for [`Rules::Glibc`]
+    /// ([`patched::convert_euc_kr_as_glibc`]).
+    EucKr,
     /// Guessing the charset, for [`Rules::Rfc`] ([`crate::guess`]).
     Guess,
 }
@@ -138,6 +142,8 @@ impl Converter {
             Converter::Patched(patch) if rules == Rules::Rfc => patched::convert(patch, input, keep_invalid),
             Converter::Patched(Patch::EucKr) => patched::convert_cp949_as_glibc(input, keep_invalid),
             Converter::Patched(patch) => convert(patch.encoding(), input, keep_invalid),
+            Converter::EucKr if rules == Rules::Rfc => Converter::Patched(Patch::EucKr).convert(input, rules, keep_invalid),
+            Converter::EucKr => patched::convert_euc_kr_as_glibc(input, keep_invalid),
         }
     }
 
@@ -147,6 +153,7 @@ impl Converter {
         match self {
             Converter::Single(table) if table.upper.iter().all(|&c| c == 0) => Converter::Guess,
             Converter::Single(table) if !table.mew => Converter::Encoding(table.encoding),
+            Converter::EucKr => Converter::Patched(Patch::EucKr),
             Converter::Ucs2(encoding) => Converter::Encoding(encoding),
             converter => converter,
         }
@@ -169,34 +176,39 @@ impl Converter {
     }
 }
 
-/// A MIME charset name that mewl renames for iconv, or retries with a
-/// superset of when the conversion fails.
+/// A MIME charset name that mewl renames for iconv, or retries with
+/// another charset when the conversion fails.
 struct Renamed {
     mime: &'static [u8],
     iconv: Option<&'static [u8]>,
     retry: Option<&'static [u8]>,
+    /// Whether the retry is a subset, which is tried only strictly and
+    /// only if the bytes look like it ([`looks_like_euc_kr`]).
+    subset: bool,
 }
 
-/// The table of mewl, `rfc2047_charsets`.
+/// The table of mewl, `rfc2047_charsets`. EUC-KR is opened as CP949,
+/// and retried as EUC-KR for "㉾" (U+327E), which CP949 lacks.
 const RENAMED: [Renamed; 10] = [
-    Renamed { mime: b"ks_c_5601-1987", iconv: Some(b"CP949"), retry: None },
-    Renamed { mime: b"windows-31j", iconv: Some(b"CP932"), retry: None },
-    Renamed { mime: b"iso-8859-8-i", iconv: Some(b"ISO-8859-8"), retry: None },
-    Renamed { mime: b"iso-2022-jp", iconv: None, retry: Some(b"CP50221") },
-    Renamed { mime: b"shift_jis", iconv: None, retry: Some(b"CP932") },
-    Renamed { mime: b"euc-jp", iconv: None, retry: Some(b"EUC-JP-MS") },
-    Renamed { mime: b"gb2312", iconv: None, retry: Some(b"GB18030") },
-    Renamed { mime: b"big5", iconv: None, retry: Some(b"BIG5-HKSCS") },
-    Renamed { mime: b"euc-kr", iconv: None, retry: Some(b"CP949") },
-    Renamed { mime: b"tis-620", iconv: None, retry: Some(b"CP874") },
+    Renamed { mime: b"ks_c_5601-1987", iconv: Some(b"CP949"), retry: Some(b"EUC-KR"), subset: true },
+    Renamed { mime: b"euc-kr", iconv: Some(b"CP949"), retry: Some(b"EUC-KR"), subset: true },
+    Renamed { mime: b"windows-31j", iconv: Some(b"CP932"), retry: None, subset: false },
+    Renamed { mime: b"iso-8859-8-i", iconv: Some(b"ISO-8859-8"), retry: None, subset: false },
+    Renamed { mime: b"iso-2022-jp", iconv: None, retry: Some(b"CP50221"), subset: false },
+    Renamed { mime: b"shift_jis", iconv: None, retry: Some(b"CP932"), subset: false },
+    Renamed { mime: b"euc-jp", iconv: None, retry: Some(b"EUC-JP-MS"), subset: false },
+    Renamed { mime: b"gb2312", iconv: None, retry: Some(b"GB18030"), subset: false },
+    Renamed { mime: b"big5", iconv: None, retry: Some(b"BIG5-HKSCS"), subset: false },
+    Renamed { mime: b"tis-620", iconv: None, retry: Some(b"CP874"), subset: false },
 ];
 
 /// The charset of an encoded-word.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Charset {
     /// For `mewl-rs-compat`: the converters of glibc that mewl tries,
-    /// for the name and for the superset to retry with, if known.
-    Glibc { name: Option<Converter>, retry: Option<Converter> },
+    /// for the name and for the charset to retry with, if known, and
+    /// whether the latter is a subset.
+    Glibc { name: Option<Converter>, retry: Option<Converter>, subset: bool },
     /// For `mewl-rs`.
     Rfc(Converter),
 }
@@ -206,18 +218,19 @@ impl Charset {
     pub fn for_name(name: &[u8], rules: Rules) -> Option<Self> {
         match rules {
             Rules::Glibc => {
-                let (mut iconv, mut retry) = (name, None);
+                let (mut iconv, mut retry, mut subset) = (name, None, false);
                 if let Some(renamed) = RENAMED.iter().find(|r| r.mime.eq_ignore_ascii_case(name)) {
                     iconv = renamed.iconv.unwrap_or(name);
                     retry = renamed.retry;
+                    subset = renamed.subset;
                 }
                 let mut converter = glibc_converter(iconv);
                 if name.eq_ignore_ascii_case(b"UTF-16") {
                     /* by the BOM, not as the converter of glibc does */
                     converter = Some(Converter::Utf16);
                 }
-                let charset = Charset::Glibc { name: converter, retry: retry.and_then(glibc_converter) };
-                (charset != Charset::Glibc { name: None, retry: None }).then_some(charset)
+                let retry = retry.and_then(glibc_converter);
+                (converter.is_some() || retry.is_some()).then_some(Charset::Glibc { name: converter, retry, subset })
             }
             Rules::Rfc => {
                 if let Some(variant) = iso2022jp::Variant::for_charset(name) {
@@ -266,14 +279,19 @@ impl Charset {
     }
 
     /// Converts `input` to UTF-8; `None` if it fails. As mewl does,
-    /// [`Charset::Glibc`] tries the name, the superset, the superset
-    /// keeping what is invalid, and the name keeping what is invalid.
+    /// [`Charset::Glibc`] tries the name, the retry, the retry keeping
+    /// what is invalid unless it is a subset, and the name keeping what
+    /// is invalid. A subset is tried only if the bytes look like it.
     /// [`Charset::Rfc`] replaces what is invalid with U+FFFD.
     pub fn convert(self, input: &[u8]) -> Option<Vec<u8>> {
         match self {
-            Charset::Glibc { name, retry } => {
+            Charset::Glibc { name, retry, subset } => {
+                let retry = retry.filter(|_| !subset || looks_like_euc_kr(input));
                 let by = |converter: Option<Converter>, keep| converter?.convert(input, Rules::Glibc, keep);
-                by(name, false).or_else(|| by(retry, false)).or_else(|| by(retry, true)).or_else(|| by(name, true))
+                by(name, false)
+                    .or_else(|| by(retry, false))
+                    .or_else(|| by(retry.filter(|_| !subset), true))
+                    .or_else(|| by(name, true))
             }
             /* UTF-8 with an 8-bit byte between ASCII is guessed, as Mew does. */
             Charset::Rfc(Converter::Encoding(e)) if e == UTF_8 && guess::lone_8bit(input) => {
@@ -284,6 +302,21 @@ impl Charset {
             }
         }
     }
+}
+
+/// Whether every byte 0x80 or above of `input` is in a pair of bytes
+/// 0xA1 to 0xFE, as in EUC-KR. Otherwise the converter of glibc for
+/// EUC-KR would take 0x80 to 0x9F for C1 controls and succeed.
+fn looks_like_euc_kr(input: &[u8]) -> bool {
+    let mut rest = input;
+    while let Some((&b, tail)) = rest.split_first() {
+        rest = match (b, tail) {
+            (..0x80, _) => tail,
+            (0xa1..=0xfe, [0xa1..=0xfe, tail @ ..]) => tail,
+            _ => return false,
+        };
+    }
+    true
 }
 
 /// The converter emulated for a charset name known to glibc.
@@ -425,14 +458,19 @@ mod tests {
         }
         /* renamed or retried as mewl does */
         let cp949 = Some(Converter::Patched(Patch::EucKr));
-        assert_eq!(glibc("KS_C_5601-1987"), Some(Charset::Glibc { name: cp949, retry: None }));
-        assert_eq!(glibc("euc-kr"), Some(Charset::Glibc { name: cp949, retry: cp949 }));
+        let euc_kr = Some(Converter::EucKr);
+        assert_eq!(glibc("KS_C_5601-1987"), Some(Charset::Glibc { name: cp949, retry: euc_kr, subset: true }));
+        assert_eq!(glibc("euc-kr"), Some(Charset::Glibc { name: cp949, retry: euc_kr, subset: true }));
+        assert_eq!(glibc("euckr"), Some(Charset::Glibc { name: euc_kr, retry: None, subset: false }));
         let cp932 = Some(Converter::Jis(jis::Variant::Cp932));
-        assert_eq!(glibc("Shift_JIS"), Some(Charset::Glibc { name: sjis, retry: cp932 }));
+        assert_eq!(glibc("Shift_JIS"), Some(Charset::Glibc { name: sjis, retry: cp932, subset: false }));
         let jp = Some(Converter::Iso2022Jp(iso2022jp::Variant::Jp));
         /* CP50221 is unknown to glibc */
-        assert_eq!(glibc("iso-2022-jp"), Some(Charset::Glibc { name: jp, retry: None }));
-        assert_eq!(glibc("iso-2022-jp-2"), Some(Charset::Glibc { name: Some(Converter::Iso2022Jp(iso2022jp::Variant::Jp2)), retry: None }));
+        assert_eq!(glibc("iso-2022-jp"), Some(Charset::Glibc { name: jp, retry: None, subset: false }));
+        assert_eq!(
+            glibc("iso-2022-jp-2"),
+            Some(Charset::Glibc { name: Some(Converter::Iso2022Jp(iso2022jp::Variant::Jp2)), retry: None, subset: false })
+        );
     }
 
     #[test]
@@ -543,15 +581,36 @@ mod tests {
         assert_eq!(decode("shift_jis", b"\x81\x60\\\x87\x40"), Some("～\\①".into()));
         assert_eq!(decode("sjis", b"\x81\x60\\\x87\x40"), Some("〜¥\u{fffd}@".into()));
         assert_eq!(decode("euc-jp", b"\xa1\xc1\xad\xa1"), Some("～①".into()));
-        assert_eq!(Charset::Glibc { name: None, retry: None }.convert(b"a"), None);
+        assert_eq!(Charset::Glibc { name: None, retry: None, subset: false }.convert(b"a"), None);
     }
 
     #[test]
     fn cp949_skips_u327e() {
         /* kept as invalid, but U+327E, which CP949 of glibc skips */
-        assert_eq!(decode("ks_c_5601-1987", b"\xa2\xe8\xc7\xd1"), Some("한".into()));
         /* one byte at a time: A2, then E9 C7 is a hanja */
         assert_eq!(decode("ks_c_5601-1987", b"\xa2\xe9\xc7\xd1"), Some("\u{fffd}茸\u{fffd}".into()));
         assert_eq!(decode("euc-kr", b"\xff\xa2\xe8"), Some("\u{fffd}".into()));
+    }
+
+    #[test]
+    fn euc_kr() {
+        for name in ["euc-kr", "ks_c_5601-1987"] {
+            /* CP949, but U+327E by EUC-KR */
+            assert_eq!(decode(name, b"\x8c\x63\xc7\xd1"), Some("똠한".into()));
+            assert_eq!(decode(name, b"\xa2\xe8\xc7\xd1"), Some("㉾한".into()));
+            /* EUC-KR is not tried if a byte is not in a pair 0xA1-0xFE, nor
+            to keep what is invalid */
+            /* where CP949 of glibc skips U+327E */
+            assert_eq!(decode(name, b"\xa2\xe8\x8c\x63"), Some("똠".into()));
+            assert_eq!(decode(name, b"\xa2\xe9\x8c\x63"), Some(String::from_utf8_lossy(b"\xa2\xe9\xeb\x98\xa0").into()));
+        }
+        /* EUC-KR by itself */
+        assert_eq!(decode("euckr", b"\x8c\x63\xa2\xe8"), Some("\u{8c}c㉾".into()));
+        /* mewl-rs as before */
+        assert_eq!(rfc("euckr"), Some(Charset::Rfc(Converter::Patched(Patch::EucKr))));
+        assert!(looks_like_euc_kr(b"a\xa1\xa1b\xfe\xfe"));
+        assert!(!looks_like_euc_kr(b"\xa1"));
+        assert!(!looks_like_euc_kr(b"\x8c\x63"));
+        assert!(!looks_like_euc_kr(b"\xa1\x41"));
     }
 }

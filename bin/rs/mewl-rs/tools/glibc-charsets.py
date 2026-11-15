@@ -95,7 +95,7 @@ CONVERTERS = {
     "EUC-CN": "Patched(Patch::Gb2312)",
     "GBK": "Encoding(&GBK_INIT)",
     "GB18030": "Patched(Patch::Gb18030)",
-    "EUC-KR": "Patched(Patch::EucKr)",
+    "EUC-KR": "EucKr",
     "UHC": "Patched(Patch::EucKr)",
     "ISO-2022-JP": "Iso2022Jp(Jp::Jp)",
     "ISO-2022-JP-2": "Iso2022Jp(Jp::Jp2)",

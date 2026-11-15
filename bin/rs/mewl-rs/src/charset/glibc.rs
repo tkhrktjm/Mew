@@ -63,7 +63,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"CP949", Patched(Patch::EucKr)), /* UHC */
     (b"CP950", Patched(Patch::Big5)), /* BIG5 */
     (b"CSASCII", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
-    (b"CSEUCKR", Patched(Patch::EucKr)), /* EUC-KR */
+    (b"CSEUCKR", EucKr), /* EUC-KR */
     (b"CSEUCPKDFMTJAPANESE", Jis(Jis::EucJp)), /* EUC-JP */
     (b"CSGB2312", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"CSIBM866", Single(&IBM866)), /* IBM866 */
@@ -92,13 +92,13 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"EUC-CN", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"EUC-JP", Jis(Jis::EucJp)), /* EUC-JP */
     (b"EUC-JP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
-    (b"EUC-KR", Patched(Patch::EucKr)), /* EUC-KR */
+    (b"EUC-KR", EucKr), /* EUC-KR */
     (b"EUCCN", Patched(Patch::Gb2312)), /* EUC-CN */
     (b"EUCJP", Jis(Jis::EucJp)), /* EUC-JP */
     (b"EUCJP-MS", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUCJP-OPEN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
     (b"EUCJP-WIN", Jis(Jis::EucJpMs)), /* EUC-JP-MS */
-    (b"EUCKR", Patched(Patch::EucKr)), /* EUC-KR */
+    (b"EUCKR", EucKr), /* EUC-KR */
     (b"GB13000", Encoding(&GBK_INIT)), /* GBK */
     (b"GB18030", Patched(Patch::Gb18030)), /* GB18030 */
     (b"GB2312", Patched(Patch::Gb2312)), /* EUC-CN */
@@ -268,7 +268,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"OSF00010101", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00010102", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00030010", Jis(Jis::EucJp)), /* EUC-JP */
-    (b"OSF0004000A", Patched(Patch::EucKr)), /* EUC-KR */
+    (b"OSF0004000A", EucKr), /* EUC-KR */
     (b"OSF05010001", Encoding(&UTF_8_INIT)), /* UTF-8 */
     (b"OSF100203B5", Patched(Patch::EucKr)), /* UHC */
     (b"SHIFT-JIS", Jis(Jis::ShiftJis)), /* SJIS */
