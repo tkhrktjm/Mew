@@ -195,9 +195,11 @@ not by utf8proc. So a few results differ from `mewl`'s:
 - An encoded-word in a charset which glibc knows but encoding_rs and
   mewl-rs do not, such as UTF-32, UCS-4, ISO-2022-KR, ISO-2022-CN,
   JOHAB, and EBCDIC, is not decoded.
-- UTF-16 and UCS-2 are UTF-16LE (UCS-2BE is UTF-16BE), without the
-  byte order mark which glibc takes for UTF-16 and seems to keep for
-  the next encoded-words, and an invalid sequence is kept otherwise.
+- `utf-16` is in the byte order of its byte order mark, or big endian
+  without one, as `mewl` takes it, but the other names of UTF-16, such
+  as `utf16`, and UCS-2 are UTF-16LE (UCS-2BE is UTF-16BE), without
+  the byte order mark which glibc takes for UTF-16 and seems to keep
+  for the next encoded-words. An invalid sequence is kept otherwise.
 - windows-1255 and windows-1258 are converted without the composition
   of glibc, by which `mewl` loses the last character of an
   encoded-word that may be composed with what follows, as it never

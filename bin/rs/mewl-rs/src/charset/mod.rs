@@ -44,8 +44,9 @@ pub enum Converter {
     Iso2022Jp(iso2022jp::Variant),
     /// UTF-7 or UTF-7-IMAP, unknown to the Encoding Standard.
     Utf7(utf7::Variant),
-    /// UTF-16 as RFC 2781 specifies, for [`Rules::Rfc`]: in the byte
-    /// order of its BOM, which is removed, or big endian without one.
+    /// UTF-16 as RFC 2781 specifies: in the byte order of its BOM,
+    /// which is removed, or big endian without one. For [`Rules::Glibc`],
+    /// only by the name `utf-16`, as mewl takes it.
     Utf16,
     /// A single-byte charset of glibc, for [`Rules::Glibc`].
     Single(&'static SingleByte),
@@ -202,7 +203,12 @@ impl Charset {
                     iconv = renamed.iconv.unwrap_or(name);
                     retry = renamed.retry;
                 }
-                let charset = Charset::Glibc { name: glibc_converter(iconv), retry: retry.and_then(glibc_converter) };
+                let mut converter = glibc_converter(iconv);
+                if name.eq_ignore_ascii_case(b"UTF-16") {
+                    /* by the BOM, not as the converter of glibc does */
+                    converter = Some(Converter::Utf16);
+                }
+                let charset = Charset::Glibc { name: converter, retry: retry.and_then(glibc_converter) };
                 (charset != Charset::Glibc { name: None, retry: None }).then_some(charset)
             }
             Rules::Rfc => {
@@ -456,8 +462,12 @@ mod tests {
         assert_eq!(conv(b"\x71\x5c\x30\x75"), "煜ふ");
         /* a BOM after the first is U+FEFF, and what is invalid U+FFFD */
         assert_eq!(conv(b"\xfe\xff\xfe\xff\xd8\x00"), "\u{feff}\u{fffd}");
-        /* mewl-rs-compat as before */
-        assert_eq!(decode("utf-16", b"\xff\xfe\x71\x5c\x30\x75"), Some("\u{feff}山田".into()));
+        /* mewl-rs-compat too, by the name utf-16 only, as mewl does */
+        assert_eq!(decode("UTF-16", b"\xff\xfe\x71\x5c\x30\x75"), Some("山田".into()));
+        assert_eq!(decode("utf-16", b"\xfe\xff\x5c\x71\x75\x30"), Some("山田".into()));
+        assert_eq!(decode("utf-16", b"\x5c\x71\x75\x30"), Some("山田".into()));
+        assert_eq!(decode("utf-16", b"\xfe\xff\xfe\xff\x5c\x71"), Some("\u{feff}山".into()));
+        assert_eq!(decode("utf16", b"\xff\xfe\x71\x5c\x30\x75"), Some("\u{feff}山田".into()));
     }
 
     #[test]

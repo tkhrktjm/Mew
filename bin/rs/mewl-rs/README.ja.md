@@ -191,9 +191,11 @@ encoding_rs (Encoding Standard) による。Unicode の正規化は utf8proc で
 - glibc は知っているが encoding_rs と mewl-rs が知らない charset、たとえば
   UTF-32、UCS-4、ISO-2022-KR、ISO-2022-CN、JOHAB、EBCDIC の encoded-word は
   復号しない。
-- UTF-16 と UCS-2 は UTF-16LE として扱い (UCS-2BE は UTF-16BE)、glibc が
-  UTF-16 で読み取り、次の encoded-word まで持ち越すらしいバイト順マークは
-  扱わない。また、不正な並びはそのまま残す。
+- `utf-16` は `mewl` と同じく、バイト順マークの示すバイト順、なければ
+  ビッグエンディアンとして扱う。しかし、`utf16` など UTF-16 のほかの名前と
+  UCS-2 は UTF-16LE として扱い (UCS-2BE は UTF-16BE)、glibc が UTF-16 で
+  読み取り、次の encoded-word まで持ち越すらしいバイト順マークは扱わない。
+  また、不正な並びはそのまま残す。
 - windows-1255 と windows-1258 は glibc の合成なしで変換する。`mewl` は
   iconv を flush しないので、後に続くものと合成されうる encoded-word の
   最後の文字を失う。"café" は "caf" になる。
