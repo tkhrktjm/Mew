@@ -48,6 +48,9 @@ pub enum Converter {
     /// which is removed, or big endian without one. For [`Rules::Glibc`],
     /// only by the name `utf-16`, as mewl takes it.
     Utf16,
+    /// UCS-2 of glibc, little or big endian as the encoding of UTF-16,
+    /// for [`Rules::Glibc`]: UTF-16 without surrogates.
+    Ucs2(&'static Encoding),
     /// A single-byte charset of glibc, for [`Rules::Glibc`].
     Single(&'static SingleByte),
     /// Shift_JIS, EUC-JP, or a variant.
@@ -116,7 +119,10 @@ impl Converter {
                 let (text, _) = encoding.decode_without_bom_handling(input);
                 Some(text.into_owned().into_bytes())
             }
+            Converter::Encoding(e) if e == UTF_16LE || e == UTF_16BE => convert_utf16_as_glibc(e, false, input, keep_invalid),
             Converter::Encoding(encoding) => convert(encoding, input, keep_invalid),
+            Converter::Ucs2(encoding) if rules == Rules::Rfc => Converter::Encoding(encoding).convert(input, rules, keep_invalid),
+            Converter::Ucs2(encoding) => convert_utf16_as_glibc(encoding, true, input, keep_invalid),
             Converter::Iso2022Jp(variant) => iso2022jp::convert(variant, rules, input, keep_invalid),
             Converter::Utf7(variant) => utf7::convert(variant, rules, input, keep_invalid),
             Converter::Utf16 => {
@@ -140,6 +146,7 @@ impl Converter {
         match self {
             Converter::Single(table) if table.upper.iter().all(|&c| c == 0) => Converter::Guess,
             Converter::Single(table) if !table.mew => Converter::Encoding(table.encoding),
+            Converter::Ucs2(encoding) => Converter::Encoding(encoding),
             converter => converter,
         }
     }
@@ -289,6 +296,49 @@ fn glibc_converter(name: &[u8]) -> Option<Converter> {
 /// other than letters, digits, and `_-.,:` (iconv/gconv_charset.c).
 fn normalize(name: &[u8]) -> Vec<u8> {
     name.iter().filter(|c| c.is_ascii_alphanumeric() || b"_-.,:".contains(c)).map(u8::to_ascii_uppercase).collect()
+}
+
+/// Converts `input` in UTF-16LE or UTF-16BE (`encoding`), or in UCS-2
+/// if `ucs2`, to UTF-8 as the converters of glibc do, for
+/// `mewl-rs-compat`. With `keep_invalid`, an invalid unit, a surrogate
+/// not in a pair or any surrogate in UCS-2, is kept a byte at a time,
+/// going on from the next byte, as mewl does after glibc fails at it;
+/// encoding_rs would keep the two bytes of the unit. What is truncated
+/// at the end, an odd byte or a high surrogate without a unit after it,
+/// is kept as it is.
+fn convert_utf16_as_glibc(encoding: &'static Encoding, ucs2: bool, input: &[u8], keep_invalid: bool) -> Option<Vec<u8>> {
+    let unit = |b: &[u8]| match encoding == UTF_16BE {
+        true => u32::from(u16::from_be_bytes([b[0], b[1]])),
+        false => u32::from(u16::from_le_bytes([b[0], b[1]])),
+    };
+    let mut out = Vec::with_capacity(input.len() * 2);
+    let mut rest = input;
+    while !rest.is_empty() {
+        let (ch, len) = match rest.len() {
+            1 => (None, 0),
+            _ => match unit(rest) {
+                0xd800..=0xdbff if !ucs2 && rest.len() < 4 => (None, 0),
+                high @ 0xd800..=0xdbff if !ucs2 => match unit(&rest[2..]) {
+                    low @ 0xdc00..=0xdfff => (char::from_u32(0x10000 + ((high - 0xd800) << 10) + (low - 0xdc00)), 4),
+                    _ => (None, 1),
+                },
+                /* None for a surrogate */
+                u => char::from_u32(u).map_or((None, 1), |c| (Some(c), 2)),
+            },
+        };
+        match ch {
+            Some(c) => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
+            None if !keep_invalid => return None,
+            /* truncated */
+            None if len == 0 => {
+                out.extend_from_slice(rest);
+                break;
+            }
+            None => out.push(rest[0]),
+        }
+        rest = &rest[len..];
+    }
+    Some(out)
 }
 
 /// Converts `input` to UTF-8 by encoding_rs. With `keep_invalid`, an
@@ -468,6 +518,21 @@ mod tests {
         assert_eq!(decode("utf-16", b"\x5c\x71\x75\x30"), Some("山田".into()));
         assert_eq!(decode("utf-16", b"\xfe\xff\xfe\xff\x5c\x71"), Some("\u{feff}山".into()));
         assert_eq!(decode("utf16", b"\xff\xfe\x71\x5c\x30\x75"), Some("\u{feff}山田".into()));
+        /* an invalid unit a byte at a time, as glibc and mewl take it */
+        let bytes = |name: &str, input: &[u8]| glibc(name).unwrap().convert(input).unwrap();
+        assert_eq!(bytes("utf-16le", b"\xdc\xdf\xfe"), b"\xdc\xef\xbb\x9f");
+        assert_eq!(bytes("utf-16", b"\xdc\xfe\xdf"), b"\xdc\xef\xbb\x9f");
+        assert_eq!(bytes("utf-16le", b"\x3d\xd8\xa9\xdc"), "💩".as_bytes());
+        /* what is truncated at the end kept */
+        assert_eq!(bytes("utf-16be", b"\x00\x41\xd8\x00"), b"A\xd8\x00");
+        assert_eq!(bytes("utf-16be", b"\x00\x41\xd8"), b"A\xd8");
+        /* no surrogates in UCS-2, as unicode is in glibc */
+        assert_eq!(bytes("ucs-2", b"\x00\xd8\x00\xdc"), b"\x00\xc3\x98\xdc");
+        assert_eq!(bytes("unicode", b"\x00\xd8\x00\xdc"), b"\x00\xc3\x98\xdc");
+        assert_eq!(bytes("ucs-2be", b"\x6c\x34"), "水".as_bytes());
+        /* but mewl-rs takes them for UTF-16 */
+        assert_eq!(rfc("ucs-2be"), Some(Charset::Rfc(Converter::Encoding(UTF_16BE))));
+        assert_eq!(rfc("unicode").unwrap().convert(b"\x3d\xd8\xa9\xdc"), Some("💩".into()));
     }
 
     #[test]

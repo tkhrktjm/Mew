@@ -82,7 +82,7 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"CSKOI8R", Single(&KOI8_R)), /* KOI8-R */
     (b"CSMACINTOSH", Single(&MACINTOSH)), /* MACINTOSH */
     (b"CSSHIFTJIS", Jis(Jis::ShiftJis)), /* SJIS */
-    (b"CSUNICODE", Encoding(&UTF_16LE_INIT)), /* UNICODE */
+    (b"CSUNICODE", Ucs2(&UTF_16LE_INIT)), /* UNICODE */
     (b"CSWINDOWS31J", Jis(Jis::Cp932)), /* CP932 */
     (b"CYRILLIC", Single(&ISO_8859_5)), /* ISO-8859-5 */
     (b"ECMA-114", Single(&ISO_8859_6)), /* ISO-8859-6 */
@@ -264,9 +264,9 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"OSF00010009", Single(&ISO_8859_9)), /* ISO-8859-9 */
     (b"OSF0001000A", Single(&ISO_8859_10)), /* ISO-8859-10 */
     (b"OSF00010020", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
-    (b"OSF00010100", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"OSF00010101", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"OSF00010102", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"OSF00010100", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"OSF00010101", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"OSF00010102", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"OSF00030010", Jis(Jis::EucJp)), /* EUC-JP */
     (b"OSF0004000A", Patched(Patch::EucKr)), /* EUC-KR */
     (b"OSF05010001", Encoding(&UTF_8_INIT)), /* UTF-8 */
@@ -282,15 +282,15 @@ pub(super) static NAMES: &[(&[u8], Converter)] = &[
     (b"TIS620.2529-1", Single(&TIS_620)), /* TIS-620 */
     (b"TIS620.2533-0", Single(&TIS_620)), /* TIS-620 */
     (b"TS-5881", Single(&ISO_8859_9)), /* ISO-8859-9 */
-    (b"UCS-2", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"UCS-2BE", Encoding(&UTF_16BE_INIT)), /* UCS-2BE */
-    (b"UCS-2LE", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
-    (b"UCS2", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"UCS-2", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"UCS-2BE", Ucs2(&UTF_16BE_INIT)), /* UCS-2BE */
+    (b"UCS-2LE", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"UCS2", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"UHC", Patched(Patch::EucKr)), /* UHC */
     (b"UJIS", Jis(Jis::EucJp)), /* EUC-JP */
-    (b"UNICODE", Encoding(&UTF_16LE_INIT)), /* UNICODE */
-    (b"UNICODEBIG", Encoding(&UTF_16BE_INIT)), /* UCS-2BE */
-    (b"UNICODELITTLE", Encoding(&UTF_16LE_INIT)), /* UCS-2LE */
+    (b"UNICODE", Ucs2(&UTF_16LE_INIT)), /* UNICODE */
+    (b"UNICODEBIG", Ucs2(&UTF_16BE_INIT)), /* UCS-2BE */
+    (b"UNICODELITTLE", Ucs2(&UTF_16LE_INIT)), /* UCS-2LE */
     (b"US", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
     (b"US-ASCII", Single(&ANSI_X3_4_1968)), /* ANSI_X3.4-1968 */
     (b"UTF-16", Encoding(&UTF_16LE_INIT)), /* UTF-16 */

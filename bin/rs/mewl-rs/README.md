@@ -197,9 +197,9 @@ not by utf8proc. So a few results differ from `mewl`'s:
   JOHAB, and EBCDIC, is not decoded.
 - `utf-16` is in the byte order of its byte order mark, or big endian
   without one, as `mewl` takes it, but the other names of UTF-16, such
-  as `utf16`, and UCS-2 are UTF-16LE (UCS-2BE is UTF-16BE), without
-  the byte order mark which glibc takes for UTF-16 and seems to keep
-  for the next encoded-words. An invalid sequence is kept otherwise.
+  as `utf16`, and `unicode` (UCS-2) are little endian, without the
+  byte order mark which glibc takes for them and seems to keep for the
+  next encoded-words.
 - windows-1255 and windows-1258 are converted without the composition
   of glibc, by which `mewl` loses the last character of an
   encoded-word that may be composed with what follows, as it never

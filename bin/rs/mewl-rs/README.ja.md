@@ -193,9 +193,8 @@ encoding_rs (Encoding Standard) による。Unicode の正規化は utf8proc で
   復号しない。
 - `utf-16` は `mewl` と同じく、バイト順マークの示すバイト順、なければ
   ビッグエンディアンとして扱う。しかし、`utf16` など UTF-16 のほかの名前と
-  UCS-2 は UTF-16LE として扱い (UCS-2BE は UTF-16BE)、glibc が UTF-16 で
+  `unicode` (UCS-2) はリトルエンディアンとして扱い、glibc がこれらで
   読み取り、次の encoded-word まで持ち越すらしいバイト順マークは扱わない。
-  また、不正な並びはそのまま残す。
 - windows-1255 と windows-1258 は glibc の合成なしで変換する。`mewl` は
   iconv を flush しないので、後に続くものと合成されうる encoded-word の
   最後の文字を失う。"café" は "caf" になる。
